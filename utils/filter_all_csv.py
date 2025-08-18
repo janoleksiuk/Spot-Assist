@@ -58,8 +58,8 @@ def process_csv_files(folder_path, output_folder=None, window_size=3):
 
 if __name__ == "__main__":
     # You can modify these parameters as needed
-    folder_path = r"C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\Supporting Tools\pre_csv"  # Change this to your folder path
-    output_folder =  r"C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\Supporting Tools\post_csv"   # Optional, change this or set to None
+    folder_path = r"pre-csv"  # Change this to your folder path
+    output_folder =  r"post-csv"   # Optional, change this or set to None
     window_size = 5  # Change the window size as needed
     
     process_csv_files(folder_path, output_folder, window_size)

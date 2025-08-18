@@ -11,6 +11,8 @@ import os
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+MODEL_PATH = r"model\trainset_100425_v2.csv"
+
 # tlabel=['Collecting-0' ,'bowing-1' ,'cleaning-2', 'looking-3', 'opening-4',
 #  'passing-5' ,'picking-6', 'placing-7', 'pushing-8', 'reading-9' , 'sitting-10',
 #  'standing-11' ,'standing_up-12', 'talking-13' ,'turing_front-14',
@@ -234,7 +236,7 @@ def print_metrics(y_test, predictions):
 	
 if __name__ == '__main__':
 
-	data1, _ = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\trainset_100425_v2.csv', isTrain= True)
+	data1, _ = read_data.input(trainpath = MODEL_PATH, isTrain= True)
 	
 	while True:
 		data2, read_data_single_exit_code = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', isTrain = False)

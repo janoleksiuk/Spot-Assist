@@ -30,14 +30,14 @@ signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
 try:
     # Launch camera
     print("Launching body tracking...")
-    p1 = subprocess.Popen(["python", r"C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\Body Tracker\body_tracking.py"])
+    p1 = subprocess.Popen(["python", r"C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\body-tracker\body_tracking.py"])
     processes.append(p1)
 
     time.sleep(3)
 
     # Launch predictor
     print("Launching predictor...")
-    p2 = subprocess.Popen(["python", r"C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\Predictor\pnn.py"])
+    p2 = subprocess.Popen(["python", r"C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\predictor\pnn.py"])
     processes.append(p2)
 
     print("All processes started. Press Ctrl+C to quit.")

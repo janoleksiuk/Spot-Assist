@@ -38,6 +38,7 @@ def approach_object(img_client, robot_command_client, object_name, model):
 
     # searching for object 
     start_rotating(robot_command_client, 0.2, duration_sec=20)
+    #Przetestować multithread
     object_found = False
 
     while True:
