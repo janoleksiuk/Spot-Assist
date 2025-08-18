@@ -19,46 +19,6 @@ from bosdyn.client import frame_helpers, math_helpers, robot_command
 from bosdyn.client.robot_command import RobotCommandBuilder, RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
 
-X_OFFSET = 0.3 #RANGE (0.2 - 0.5)
-Y_OFFSET = 0.3 #RANGE (0.1 - 0.4)
-
-# def get_actual_stance_offsets(state):
-
-    # # Get foot positions in body frame
-    # foot_positions = state.kinematic_state.foot_position_rt_body
-
-    # # Calculate offsets from body center for each foot
-    # feet_names = ["front_left", "front_right", "hind_left", "hind_right"]
-    # initial_offsets = {}
-
-    # for foot_name in feet_names:
-    #     if foot_name in foot_positions:
-    #         pos = foot_positions[foot_name]
-    #         initial_offsets[foot_name] = {
-    #             'x': pos.x,
-    #             'y': pos.y,
-    #             'z': pos.z
-    #         }
-    #         print(f"Initial {foot_name} offset: x={pos.x:.3f}, y={pos.y:.3f}, z={pos.z:.3f}")
-
-    # # Calculate average x_offset and y_offset
-    # fl = initial_offsets.get('front_left', {'x': 0, 'y': 0})
-    # fr = initial_offsets.get('front_right', {'x': 0, 'y': 0})
-    # hl = initial_offsets.get('hind_left', {'x': 0, 'y': 0})
-    # hr = initial_offsets.get('hind_right', {'x': 0, 'y': 0})
-
-    # avg_front_x = (fl['x'] + fr['x']) / 2
-    # avg_hind_x = (hl['x'] + hr['x']) / 2
-    # avg_left_y = (fl['y'] + hl['y']) / 2
-    # avg_right_y = (fr['y'] + hr['y']) / 2
-
-    # initial_x_offset = (avg_front_x - avg_hind_x) / 2
-    # initial_y_offset = (avg_left_y - avg_right_y) / 2
-
-    # print(f"Calculated initial stance parameters:")
-    # print(f"initial_x_offset = {abs(initial_x_offset):.3f}")
-    # print(f"initial_y_offset = {abs(initial_y_offset):.3f}")
-
 def run(config):
     """Testing API Stance
 

@@ -1,13 +1,7 @@
 import threading
-import time
-
 import numpy as np
-import vg
-
 import read_data
 import matplotlib.pyplot as plt
-from scipy.spatial import distance
-from adjustText import adjust_text
 from sklearn.metrics import accuracy_score, \
 							confusion_matrix, \
 							precision_score, \
@@ -16,6 +10,7 @@ from sklearn.metrics import accuracy_score, \
 import os
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 # tlabel=['Collecting-0' ,'bowing-1' ,'cleaning-2', 'looking-3', 'opening-4',
 #  'passing-5' ,'picking-6', 'placing-7', 'pushing-8', 'reading-9' , 'sitting-10',
 #  'standing-11' ,'standing_up-12', 'talking-13' ,'turing_front-14',
@@ -27,7 +22,6 @@ def gas(centre, x, sigma):
 	temp = -np.sum((centre - x) ** 2, axis = 1)
 	temp = temp / (2 * sigma * sigma)
 	temp = np.exp(temp)
-	print(temp.shape)
 	gaussian = np.sum(temp)
 
 	return gaussian
@@ -113,9 +107,33 @@ def subset_by_class(data, labels):
 	return x_train_subsets
 
 def action_task(label):
-	print("the action---"+str(label)+"---is done")
-	print("the robot command can put here!")
+	# print("the action---"+str(label)+"---is done")
+	# print("the robot command can put here!")
+	pass
 
+# this is function outputting predicition - returns value of pose which will be passed to robot controller
+def handle_prediction(predictions, endpoint_path):
+
+	#find dominant array value
+	values, counts = np.unique(np.array(predictions), return_counts=True)
+	value =  int(values[np.argmax(counts)])
+	pose  = [k for k, v in dic.items() if v == value][0]
+	# print(pose)
+	
+	#write pose value to the txt endpoint file
+	with open(endpoint_path, 'w') as f:
+		f.write(str(value))
+
+	#ADDITIONALLY writing pose string to another txt endpoint as informative feedback
+	try:
+		with open(r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\pose_string.txt', 'w') as ff:
+			ff.write(str(pose))
+	except Exception as e:
+		pass
+
+	return value
+
+#PNN implementation
 def PNN(data,sigma,tag):
 	SkeletonConnectionMap = [[1, 0],
 							 [2, 1],
@@ -190,18 +208,19 @@ def PNN(data,sigma,tag):
 		for  n in range(len(summation_layer)):
 			summation_layer[n]=format(summation_layer[n],".3e")
 		predictions[i] = np.argmax(summation_layer)
-		print([k for k,v in dic.items() if v==predictions[i]])
+		# print([k for k,v in dic.items() if v==predictions[i]])
 		if i==0:
 			continue
 		elif i==predictions.shape[0]-1:
 			thread = threading.Thread(target=action_task, args=([k for k, v in dic.items() if v == predictions[i - 1]]))
 			thread.start()
-			time.sleep(5)
+			# time.sleep(5)
 		else:
 			if predictions[i]!=predictions[i-1]:
 				thread=threading.Thread(target=action_task,args=([k for k,v in dic.items() if v==predictions[i-1]]))
 				thread.start()
-				time.sleep(5)
+				# time.sleep(5)
+
 	return predictions
 
 def print_metrics(y_test, predictions):
@@ -212,9 +231,29 @@ def print_metrics(y_test, predictions):
 	print('Precision: {}'.format(precision_score(y_test, predictions, average = 'macro')))
 	print('Recall: {}'.format(recall_score(y_test, predictions, average = 'macro')))
 	print('F1: {}'.format(f1_score(y_test, predictions, average='macro')))
+	
 if __name__ == '__main__':
 
-	data = read_data.input(trainpath = 'trainset_100425_v2.csv',testpath= 'testdata/19.csv')
-	precision=PNN(data, 0.01867524 , 3)
+	data1, _ = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\trainset_100425_v2.csv', isTrain= True)
+	
+	while True:
+		data2, read_data_single_exit_code = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', isTrain = False)
+
+		if read_data_single_exit_code == 1:
+
+			#rearranging arrays
+			ordered_keys = ['x_train', 'x_test', 'y_train', 'y_test']
+			combined = {**data1, **data2}
+			data = {k: combined[k] for k in ordered_keys}
+			
+			#predicitng
+			predictions=PNN(data, 0.01867524 , 3)
+
+			#handling predictions
+			value = handle_prediction(predictions=predictions, endpoint_path=r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt')
+		
+		else:
+			print("Corrupted data - prediciton skipped")
+			continue
 
 	

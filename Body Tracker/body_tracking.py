@@ -207,7 +207,7 @@ def main():
                         keypoint_3d_array = np.append(keypoint_3d_array, keypoint_3d_row, axis=0)
                         body_detected_idx +=1
                     
-            # create dataframe every 10 frames - to be used by predictor:
+            # create dataframe every 15 frames - to be used by predictor:
             if body_detected_idx == int(30/FREQ):
 
                 #arrange 102x10 matrix from 1x1020 array  

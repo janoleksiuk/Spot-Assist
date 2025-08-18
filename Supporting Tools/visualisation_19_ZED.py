@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import matplotlib.animation as animation
 
-PATH = "19.csv"
+PATH = "data\19.csv"
 
 def animate_xy_coordinates(csv_file):
     """
