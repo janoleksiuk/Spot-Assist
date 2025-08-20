@@ -18,6 +18,7 @@ def input(trainpath, isTrain = True):
 	sizetrain = file_out_t.iloc[0:, 0:osize].values.shape[0]
 	x_train = file_out_t.iloc[0:sizetrain, 0:osize].values
 	y_train = file_out_t.iloc[0:sizetrain, osize].values
+	
 	for n in range(len(y_train)):
 		if y_train[n]=="sittting" :
 			y_train[n]="sitting"

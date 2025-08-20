@@ -3,10 +3,16 @@ import cv2
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from multiprocessing import shared_memory
+import time
 
 BODY_IDX = 34
-CONFIDENCE_THR = 40
-FREQ = 2
+CONFIDENCE_THR = 40 # confidence of body_point detection
+FREQ = 2 # fps = 30/FREQ
+
+# shared memory segments
+PNN_INPUT_MEMORY_NAME = "pnn_input"
+DETECTED_POSE_MEMORY_NAME = "detected_pose_code_shm"
 
 # FPS 30 #
 
@@ -90,7 +96,7 @@ def process_df(df):
     # Rename the columns
     df = df.rename(columns=rename_dict)
     
-    # Add a 'label' column with default value 'standing' to match pnn.py syntax
+    # Add a 'label' column with default value 'standing' to match pnn.py syntax 
     df['label'] = 'standing'
 
     #filtering
@@ -99,6 +105,12 @@ def process_df(df):
     return df
 
 def main():
+
+    # Create communication variables
+    detected_pose_code_shm = shared_memory.SharedMemory(name=DETECTED_POSE_MEMORY_NAME) # init it first !!!
+    received_data_shape = (1,)
+    array_dtype = np.int64
+    
     # Create a Camera object
     zed = sl.Camera()
 
@@ -113,6 +125,7 @@ def main():
     err = zed.open(init_params)
     if err != sl.ERROR_CODE.SUCCESS:
         print("Camera Open : "+repr(err)+". Exit program.")
+        detected_pose_code_shm.close()
         exit()
 
     body_params = sl.BodyTrackingParameters()
@@ -136,6 +149,7 @@ def main():
     if err != sl.ERROR_CODE.SUCCESS:
         print("Enable Body Tracking : "+repr(err)+". Exit program.")
         zed.close()
+        detected_pose_code_shm.close()
         exit()
     
     # Setup for visualization
@@ -160,6 +174,8 @@ def main():
     for l in range(34):
         header.extend([f'x{l}', f'y{l}', f'z{l}'])
     
+    poses_dict = {"[0]" : "sitting", "[1]": "standing", "[2]" : "sitting_1hand", "[3]": "standing_1hand"}
+    
     #initializing variables
     i = 0 
     body_detected_idx = 0
@@ -176,92 +192,96 @@ def main():
     cv2.moveWindow("ZED Body Tracking", 0, 0)
 
     #body tracking
-    while True:
-        if zed.grab() == sl.ERROR_CODE.SUCCESS:
-            # Retrieve the left image
-            zed.retrieve_image(image, sl.VIEW.LEFT)
-            
-            # Retrieve bodies
-            err = zed.retrieve_bodies(bodies, body_runtime_param)
-            
-            # Convert sl.Mat to OpenCV Mat
-            img_cv = image.get_data()
-            
-            # Draw skeleton for each detected person
-            if bodies.is_new and bodies.body_list:
-                # print(f"{len(bodies.body_list)} Person(s) detected")
+    try:
+        while True:
+            if zed.grab() == sl.ERROR_CODE.SUCCESS:
+                # Retrieve the left image
+                zed.retrieve_image(image, sl.VIEW.LEFT)
                 
-                # Iterate through all detected bodies
-                for idx, body in enumerate(bodies.body_list):
+                # Retrieve bodies
+                err = zed.retrieve_bodies(bodies, body_runtime_param)
+                
+                # Convert sl.Mat to OpenCV Mat
+                img_cv = image.get_data()
+                
+                # Draw skeleton for each detected person
+                if bodies.is_new and bodies.body_list:
+                    # print(f"{len(bodies.body_list)} Person(s) detected")
                     
-                    # Get 3D keypoints and transform the to (102,1) form
-                    keypoint_3d = np.array([body.keypoint])
-                    for j in range (0, BODY_IDX):
-                        keypoint_3d_row[3*j:3*j + 3] = keypoint_3d[0][j]
+                    # Iterate through all detected bodies
+                    for idx, body in enumerate(bodies.body_list):
+                        
+                        # Get 3D keypoints and transform the to (102,1) form
+                        keypoint_3d = np.array([body.keypoint])
+                        for j in range (0, BODY_IDX):
+                            keypoint_3d_row[3*j:3*j + 3] = keypoint_3d[0][j]
 
-                    # append to output 3D keypoints matrix
-                    if body_detected_idx == 0:
-                        keypoint_3d_array = keypoint_3d_row
-                        body_detected_idx += 1
-                    else:
-                        keypoint_3d_array = np.append(keypoint_3d_array, keypoint_3d_row, axis=0)
-                        body_detected_idx +=1
+                        # append to output 3D keypoints matrix
+                        if body_detected_idx == 0:
+                            keypoint_3d_array = keypoint_3d_row
+                            body_detected_idx += 1
+                        else:
+                            keypoint_3d_array = np.append(keypoint_3d_array, keypoint_3d_row, axis=0)
+                            body_detected_idx +=1
+                        
+                # create dataframe every 15 frames - to be used by predictor:
+                if body_detected_idx == int(30/FREQ):
+
+                    #arrange 102x10 matrix from 1x1020 array  
+                    keypoint_3d_matrix = np.zeros((body_detected_idx,102), dtype = float)
+                    for k in range (0, body_detected_idx):
+                        keypoint_3d_matrix[k] = keypoint_3d_array[k*102:k*102+102]
                     
-            # create dataframe every 15 frames - to be used by predictor:
-            if body_detected_idx == int(30/FREQ):
+                    df = pd.DataFrame(keypoint_3d_matrix, columns = header)
 
-                #arrange 102x10 matrix from 1x1020 array  
-                keypoint_3d_matrix = np.zeros((body_detected_idx,102), dtype = float)
-                for k in range (0, body_detected_idx):
-                    keypoint_3d_matrix[k] = keypoint_3d_array[k*102:k*102+102]
+                    # preprocess data
+                    df = process_df(df=df)
+
+                    # save df as csv in prod directory
+                    df.to_csv(r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', index= False)
+
+                    #reset variables
+                    body_detected_idx = 0      
+
+                # Draw informative text on img
+                pose_value_arr = "Undetected"
+
+                try:
+                    pose_value_arr = np.ndarray(received_data_shape, dtype=array_dtype, buffer=detected_pose_code_shm.buf)
+                    pose_string = poses_dict[str(pose_value_arr)]
+
+                except Exception as e:
+                    print(f"Bład: {e}")
+
+                cv2.putText(
+                    img_cv,                     # Image to draw on
+                    pose_string,                 # Text
+                    (10, 300),                   # Position (x=10, y=30)
+                    cv2.FONT_HERSHEY_SIMPLEX,   # Font
+                    5,                          # Font scale
+                    (0, 0, 255),                # Color (Green in BGR)
+                    5,                          # Thickness
+                    cv2.LINE_AA                 # Line type for anti-aliasing
+                )    
+
+                # Display the image
+                cv2.imshow("ZED Body Tracking", img_cv)
                 
-                df = pd.DataFrame(keypoint_3d_matrix, columns = header)
+                # Handle keyboard input
+                key = cv2.waitKey(10)
+                if key == 27:  # ESC key
+                    detected_pose_code_shm.close()
+                    break
+                    
+            i += 1
 
-                # preprocess data
-                df = process_df(df=df)
-
-                # save df as csv in prod directory
-                df.to_csv(r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', index= False)
-
-                #reset variables
-                body_detected_idx = 0      
-
-            # Draw informative text on img
-            try:
-                with open(r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\pose_string.txt', 'r') as f:
-                    pose_string = f.read().strip()  # strip removes any newlines or spaces
-                    if pose_string == '':
-                        raise ValueError("File is empty")
-            except FileNotFoundError:
-                pose_string = 'Undetected'
-            except ValueError as e:
-                pose_string = 'Undetected'
-
-            cv2.putText(
-                img_cv,                     # Image to draw on
-                pose_string,                 # Text
-                (10, 300),                   # Position (x=10, y=30)
-                cv2.FONT_HERSHEY_SIMPLEX,   # Font
-                5,                          # Font scale
-                (0, 0, 255),                # Color (Green in BGR)
-                5,                          # Thickness
-                cv2.LINE_AA                 # Line type for anti-aliasing
-            )    
-
-            # Display the image
-            cv2.imshow("ZED Body Tracking", img_cv)
-            
-            # Handle keyboard input
-            key = cv2.waitKey(10)
-            if key == 27:  # ESC key
-                break
-                
-        i += 1
-
-    # Close the camera and destroy windows
-    zed.disable_body_tracking()
-    zed.close()
-    cv2.destroyAllWindows()
+        # Close the camera and destroy windows
+        zed.disable_body_tracking()
+        zed.close()
+        cv2.destroyAllWindows()
+    
+    except KeyboardInterrupt:
+        detected_pose_code_shm.close()
 
 if __name__ == "__main__":
     main()

@@ -1,22 +1,31 @@
 import threading
+import time
 import numpy as np
 import read_data
 import matplotlib.pyplot as plt
+from multiprocessing import shared_memory
 from sklearn.metrics import accuracy_score, \
 							confusion_matrix, \
 							precision_score, \
 							f1_score, \
 							recall_score
 import os
+from pathlib import Path
+
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-MODEL_PATH = r"model\trainset_100425_v2.csv"
+MODEL_PATH = "\\model\\model.csv"
+DETECTED_POSE_MEMORY_NAME = "detected_pose_code_shm"
+PNN_INPUT_MEMORY_NAME = "pnn_input"
 
-# tlabel=['Collecting-0' ,'bowing-1' ,'cleaning-2', 'looking-3', 'opening-4',
-#  'passing-5' ,'picking-6', 'placing-7', 'pushing-8', 'reading-9' , 'sitting-10',
-#  'standing-11' ,'standing_up-12', 'talking-13' ,'turing_front-14',
-#  'turning-15' ,'walking-16']
+# file direct0ry creator function - for launcher usage
+def assemble_dir(str_subfolder: str) -> str:
+    cwd = Path.cwd()
+    output_dir = str(cwd).replace("\\launch", str_subfolder)
+    print(output_dir)
+    return output_dir
+
 # Helper function that combines the pattern layer and summation layer
 dic = {'sitting': 0, 'standing': 1, 'sitting_1hand': 2, 'standing_1hand': 3}
 def gas(centre, x, sigma):
@@ -114,24 +123,24 @@ def action_task(label):
 	pass
 
 # this is function outputting predicition - returns value of pose which will be passed to robot controller
-def handle_prediction(predictions, endpoint_path):
+def handle_prediction(predictions, shm_value):
 
 	#find dominant array value
 	values, counts = np.unique(np.array(predictions), return_counts=True)
 	value =  int(values[np.argmax(counts)])
-	pose  = [k for k, v in dic.items() if v == value][0]
-	# print(pose)
+	#pose  = [k for k, v in dic.items() if v == value][0]
 	
-	#write pose value to the txt endpoint file
-	with open(endpoint_path, 'w') as f:
-		f.write(str(value))
+	#write pose value to the endpoint
+	# with open(endpoint_path, 'w') as f:
+	# 	f.write(str(value))
+	shm_value[0] = value
 
 	#ADDITIONALLY writing pose string to another txt endpoint as informative feedback
-	try:
-		with open(r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\pose_string.txt', 'w') as ff:
-			ff.write(str(pose))
-	except Exception as e:
-		pass
+	# try:
+	# 	with open(r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\pose_string.txt', 'w') as ff:
+	# 		ff.write(str(pose))
+	# except Exception as e:
+	# 	pass
 
 	return value
 
@@ -234,28 +243,45 @@ def print_metrics(y_test, predictions):
 	print('Recall: {}'.format(recall_score(y_test, predictions, average = 'macro')))
 	print('F1: {}'.format(f1_score(y_test, predictions, average='macro')))
 	
-if __name__ == '__main__':
+def main():
 
-	data1, _ = read_data.input(trainpath = MODEL_PATH, isTrain= True)
-	
-	while True:
-		data2, read_data_single_exit_code = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', isTrain = False)
+	shm = shared_memory.SharedMemory(create=True, size=8, name=DETECTED_POSE_MEMORY_NAME)
+	shared_detected_pose_code = np.ndarray((1,), dtype=np.int64, buffer=shm.buf)
 
-		if read_data_single_exit_code == 1:
+	# waiting for body_tracking module initialization
+	print("Waiting for camera...")
+	time.sleep(5)
 
-			#rearranging arrays
-			ordered_keys = ['x_train', 'x_test', 'y_train', 'y_test']
-			combined = {**data1, **data2}
-			data = {k: combined[k] for k in ordered_keys}
-			
-			#predicitng
-			predictions=PNN(data, 0.01867524 , 3)
-
-			#handling predictions
-			value = handle_prediction(predictions=predictions, endpoint_path=r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt')
+	try: 
+		#import model
+		model_dir = assemble_dir("\\predictor" + MODEL_PATH)
+		data1, _ = read_data.input(trainpath = model_dir, isTrain= True)
 		
-		else:
-			print("Corrupted data - prediciton skipped")
-			continue
+		# prediction loop
+		while True:
+			data2, read_data_single_exit_code = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', isTrain = False)
 
+			if read_data_single_exit_code == 1:
+
+				#rearranging arrays
+				ordered_keys = ['x_train', 'x_test', 'y_train', 'y_test']
+				combined = {**data1, **data2}
+				data = {k: combined[k] for k in ordered_keys}
+				
+				#predicitng
+				predictions=PNN(data, 0.01867524 , 3)
+
+				#handling predictions
+				# value = handle_prediction(predictions=predictions, endpoint_path=r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt')
+				value = handle_prediction(predictions=predictions, shm_value=shared_detected_pose_code)
+			
+			else:
+				print("Corrupted data - prediciton skipped")
+				continue
 	
+	except KeyboardInterrupt:
+		shm.close()
+		shm.unlink()
+	
+if __name__ == '__main__':
+	main()
