@@ -40,7 +40,7 @@ def main():
     try:
         # Launch predictor
         print("Launching predictor...")
-        predictor_dir = assemble_dir(str_subfolder="\\predictor\\pnn.py")
+        predictor_dir = assemble_dir(str_subfolder="\\pose-classifier\\pnn.py")
         p1 = subprocess.Popen(["python", predictor_dir])
         processes.append(p1)
 

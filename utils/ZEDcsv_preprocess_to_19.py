@@ -162,7 +162,7 @@ def process_csv(csv_file, output_file=None):
 
 # Example usage:
 if __name__ == "__main__":
-    input_file = "data\34.csv"  # Replace with your input file
-    output_file = "data\19.csv"  # Replace with your desired output file
+    input_file = "data_34\34.csv"  # Replace with your input file
+    output_file = "data_19\19.csv"  # Replace with your desired output file
     
     processed_df = process_csv(input_file, output_file)

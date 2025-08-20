@@ -6,7 +6,7 @@ import matplotlib.animation as animation
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.widgets import Slider
 
-PATH = "data\19.csv"
+PATH = "data_19\19.csv"
 
 def animate_xyz_coordinates(csv_file):
     """

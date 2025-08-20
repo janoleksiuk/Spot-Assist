@@ -254,7 +254,7 @@ def main():
 
 	try: 
 		#import model
-		model_dir = assemble_dir("\\predictor" + MODEL_PATH)
+		model_dir = assemble_dir("\\pose-classifier" + MODEL_PATH)
 		data1, _ = read_data.input(trainpath = model_dir, isTrain= True)
 		
 		# prediction loop
