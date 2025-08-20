@@ -16,6 +16,7 @@ os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 MODEL_PATH = "\\model\\model.csv"
+
 DETECTED_POSE_MEMORY_NAME = "detected_pose_code_shm"
 PNN_INPUT_MEMORY_NAME = "pnn_input"
 

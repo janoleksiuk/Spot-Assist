@@ -21,17 +21,18 @@ from ultralytics import YOLO
 
 # detecting objects using YOLO model
 def detect_objects(image_client, model, confidence=0.4, source_name='hand_color_image'):
-   
+
     # retrieving image from spot camera (source name)
     response = image_client.get_image_from_sources([source_name])[0]
     img_data = response.shot.image.data
     pil_img = Image.open(io.BytesIO(img_data))
     img = np.array(pil_img)
     frame = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    if not source_name == 'hand_color_image':
+        frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
     
     # determing detected objects within frame
-    results = model(frame, conf=confidence, verbose=False)
+    results = model(frame, conf=confidence, verbose=False, show=True)
     detections = []
     for result in results:
         for box in result.boxes:
@@ -48,40 +49,52 @@ def detect_objects(image_client, model, confidence=0.4, source_name='hand_color_
 
 # computing distance from spot to object based on depth of the captured image
 def compute_depth_to_object(image_client, bbox, source_name='hand_depth_in_hand_color_frame'):
+    err_cnt = int(0)
+    corr_cnt = int(0)
+    output_depth = 0.0
 
-    # retrieving image from spot depth camera
-    response = image_client.get_image_from_sources([source_name])[0]
-    img_data = response.shot.image.data
+    while True:
+        # retrieving image from spot depth camera
+        response = image_client.get_image_from_sources([source_name])[0]
+        img_data = response.shot.image.data
 
-    try:
-        pil_img = Image.open(io.BytesIO(img_data))
-        depth_img = np.array(pil_img)
-    except UnidentifiedImageError:
-        depth_img = np.frombuffer(img_data, dtype=np.uint16).reshape(
-            response.shot.image.rows, response.shot.image.cols)
+        try:
+            pil_img = Image.open(io.BytesIO(img_data))
+            depth_img = np.array(pil_img)
+        except UnidentifiedImageError:
+            depth_img = np.frombuffer(img_data, dtype=np.uint16).reshape(
+                response.shot.image.rows, response.shot.image.cols)
 
-    if depth_img.dtype != np.uint16:
-        depth_img = depth_img.astype(np.uint16)
+        if depth_img.dtype != np.uint16:
+            depth_img = depth_img.astype(np.uint16)
 
-    x1, y1, x2, y2 = bbox
-    center_x = int((x1 + x2) / 2)
-    center_y = int((y1 + y2) / 2)
+        x1, y1, x2, y2 = bbox
+        center_x = int((x1 + x2) / 2)
+        center_y = int((y1 + y2) / 2)
 
-    h, w = depth_img.shape
-    center_x = np.clip(center_x, 0, w - 1)
-    center_y = np.clip(center_y, 0, h - 1)
+        h, w = depth_img.shape
+        center_x = np.clip(center_x, 0, w - 1)
+        center_y = np.clip(center_y, 0, h - 1)
 
-    kernel_size = 7
-    half_k = kernel_size // 2
-    neighbors = depth_img[max(0, center_y - half_k):min(h, center_y + half_k + 1),
-                           max(0, center_x - half_k):min(w, center_x + half_k + 1)]
-    valid_neighbors = neighbors[neighbors > 0]
+        kernel_size = 7
+        half_k = kernel_size // 2
+        neighbors = depth_img[max(0, center_y - half_k):min(h, center_y + half_k + 1),
+                                max(0, center_x - half_k):min(w, center_x + half_k + 1)]
+        valid_neighbors = neighbors[neighbors >= 0.01]
 
-    if valid_neighbors.size < 10:
-        print("No valid neighborhood depth data.")
-        return 0.0
+        if valid_neighbors.size < 5:
+            #print("No valid neighborhood depth data.")
+            err_cnt += 1
+            if err_cnt > 50:
+                print("Error: Invalid point cloud from depth source")
+                return 0.0
+            continue
 
-    depth_mm = int(np.median(valid_neighbors))
-    depth_meters = depth_mm / 1000.0
-    print(f"Distance: {depth_meters:.2f} meters")
-    return depth_meters
+        depth_mm = int(np.median(valid_neighbors))
+        depth_meters = depth_mm / 1000.0
+        output_depth += (depth_mm / 1000.0)
+        corr_cnt += 1
+        #print(f"Distance: {depth_meters:.2f} meters")
+        
+        if corr_cnt == int(25):
+            return output_depth/25.0

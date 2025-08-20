@@ -9,7 +9,7 @@ import bosdyn.client.estop
 import bosdyn.client.lease
 import bosdyn.client.util
 
-from bosdyn.api import basic_command_pb2
+from bosdyn.api import basic_command_pb2, manipulation_api_pb2, arm_command_pb2, robot_command_pb2, synchronized_command_pb2
 from bosdyn.api import geometry_pb2 as geo
 from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 
@@ -130,7 +130,6 @@ def stand(client):
 
 # start rotating 
 def start_rotating(client, rot_velocity, duration_sec = 2):
-    
     print("--- ROTATING: INIT ---")
 
     try: 
@@ -143,7 +142,6 @@ def start_rotating(client, rot_velocity, duration_sec = 2):
 
 # stop moving - including rotating
 def stop_moving(client):
-
     print("--- MOVING: END ---")
 
     try: 
@@ -151,7 +149,42 @@ def stop_moving(client):
         robot_command = RobotCommandBuilder.build_synchro_command(cmd)
         client.robot_command(robot_command, end_time_secs=time.time() + 1.0)
     except Exception as e:
-        print(f"Failed to stop rotation: {e}")
+        print(f"Failed to stop motion: {e}")
         client.robot_command(RobotCommandBuilder.stop_command())
 
+# raising arm
+def raise_arm(client):
+    sh0 = 0.0
+    sh1 = -1.5
+    el0 = 2.5
+    el1 = 0.0
+    wr0 = -1.5
+    wr1 = 0.0
 
+    traj_point = RobotCommandBuilder.create_arm_joint_trajectory_point(
+        sh0, sh1, el0, el1, wr0, wr1, time_since_reference_secs=1.0)
+
+    arm_joint_traj = arm_command_pb2.ArmJointTrajectory(points=[traj_point])
+    joint_move_cmd = arm_command_pb2.ArmJointMoveCommand.Request(trajectory=arm_joint_traj)
+    arm_cmd = arm_command_pb2.ArmCommand.Request(arm_joint_move_command=joint_move_cmd)
+    sync_cmd = synchronized_command_pb2.SynchronizedCommand.Request(arm_command=arm_cmd)
+    robot_cmd = robot_command_pb2.RobotCommand(synchronized_command=sync_cmd)
+    full_cmd = RobotCommandBuilder.build_synchro_command(robot_cmd)
+    print("Lifting the arm after grasping...")
+    client.robot_command(full_cmd)
+    time.sleep(2.0)
+    print("Arm lift completed. Preparing for the delivery phase.")
+
+# moving froward with controlled velocity
+def move_forward(client, fwd_vel, duration_sec=0.5):
+    print(f"--- MOVING FORWARD with velocity {fwd_vel} : INIT ---")
+    
+    try:
+        cmd = RobotCommandBuilder.synchro_velocity_command(fwd_vel, 0, 0)
+        robot_command = RobotCommandBuilder.build_synchro_command(cmd)
+        client.robot_command(robot_command, end_time_secs=time.time() + duration_sec)
+        time.sleep(duration_sec)
+
+    except Exception as e:
+        print(f"Failed to move forward: {e}")
+        client.robot_command(RobotCommandBuilder.stop_command())

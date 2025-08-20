@@ -3,7 +3,8 @@ import numpy as np
 from multiprocessing import shared_memory
 
 DETECTED_POSE_MEMORY_NAME = "detected_pose_code_shm"
-DETECTED_SEQ_MEMORY_NAME = 'detected_seq_code_shm'
+DETECTED_SEQ_MEMORY_NAME = "detected_seq_code_shm"
+
 POSE_ENDPOINT_PATH = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\action_code.txt'
 
 #function retrieving detected pose code from endpoint (.txt file)
