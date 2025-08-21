@@ -10,15 +10,14 @@ from sklearn.metrics import accuracy_score, \
 							f1_score, \
 							recall_score
 import os
+import sys
+import signal
 from pathlib import Path
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 MODEL_PATH = "\\model\\model.csv"
-
-DETECTED_POSE_MEMORY_NAME = "detected_pose_code_shm"
-PNN_INPUT_MEMORY_NAME = "pnn_input"
 
 # file direct0ry creator function - for launcher usage
 def assemble_dir(str_subfolder: str) -> str:
@@ -124,7 +123,7 @@ def action_task(label):
 	pass
 
 # this is function outputting predicition - returns value of pose which will be passed to robot controller
-def handle_prediction(predictions, shm_value):
+def handle_prediction(predictions, shm):
 
 	#find dominant array value
 	values, counts = np.unique(np.array(predictions), return_counts=True)
@@ -134,7 +133,8 @@ def handle_prediction(predictions, shm_value):
 	#write pose value to the endpoint
 	# with open(endpoint_path, 'w') as f:
 	# 	f.write(str(value))
-	shm_value[0] = value
+	#shm_value[0] = value
+	shm.buf[:8] = value.to_bytes(8, byteorder='little', signed=True)
 
 	#ADDITIONALLY writing pose string to another txt endpoint as informative feedback
 	# try:
@@ -244,45 +244,49 @@ def print_metrics(y_test, predictions):
 	print('Recall: {}'.format(recall_score(y_test, predictions, average = 'macro')))
 	print('F1: {}'.format(f1_score(y_test, predictions, average='macro')))
 	
-def main():
+def main(argv):
 
-	shm = shared_memory.SharedMemory(create=True, size=8, name=DETECTED_POSE_MEMORY_NAME)
-	shared_detected_pose_code = np.ndarray((1,), dtype=np.int64, buffer=shm.buf)
+	# mapping onto memory segment detected pose code value holder
+	shm_detected_posed_code = argv[1]
+	shm = shared_memory.SharedMemory(name=shm_detected_posed_code)
+
+	def cleanup(signum=None, frame=None):
+		print("[Predictor Module]: cleaning up shared memory...")
+		shm.close()
+		exit(0)
+
+	signal.signal(signal.SIGTERM, cleanup)
+	signal.signal(signal.SIGINT, cleanup)
 
 	# waiting for body_tracking module initialization
-	print("Waiting for camera...")
-	time.sleep(5)
+	# print("Waiting for camera...")
+	# time.sleep(5)
 
-	try: 
-		#import model
-		model_dir = assemble_dir("\\pose-classifier" + MODEL_PATH)
-		data1, _ = read_data.input(trainpath = model_dir, isTrain= True)
-		
-		# prediction loop
-		while True:
-			data2, read_data_single_exit_code = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', isTrain = False)
-
-			if read_data_single_exit_code == 1:
-
-				#rearranging arrays
-				ordered_keys = ['x_train', 'x_test', 'y_train', 'y_test']
-				combined = {**data1, **data2}
-				data = {k: combined[k] for k in ordered_keys}
-				
-				#predicitng
-				predictions=PNN(data, 0.01867524 , 3)
-
-				#handling predictions
-				# value = handle_prediction(predictions=predictions, endpoint_path=r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt')
-				value = handle_prediction(predictions=predictions, shm_value=shared_detected_pose_code)
-			
-			else:
-				print("Corrupted data - prediciton skipped")
-				continue
+	#import model
+	model_dir = assemble_dir("\\pose-classifier" + MODEL_PATH)
+	data1, _ = read_data.input(trainpath = model_dir, isTrain= True)
 	
-	except KeyboardInterrupt:
-		shm.close()
-		shm.unlink()
+	# prediction loop
+	while True:
+		data2, read_data_single_exit_code = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', isTrain = False)
+
+		if read_data_single_exit_code == 1:
+
+			#rearranging arrays
+			ordered_keys = ['x_train', 'x_test', 'y_train', 'y_test']
+			combined = {**data1, **data2}
+			data = {k: combined[k] for k in ordered_keys}
+			
+			#predicitng
+			predictions=PNN(data, 0.01867524 , 3)
+
+			#handling predictions
+			# value = handle_prediction(predictions=predictions, endpoint_path=r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt')
+			value = handle_prediction(predictions=predictions, shm=shm)
+		
+		else:
+			print("Corrupted data - prediciton skipped")
+			continue
 	
 if __name__ == '__main__':
-	main()
+	main(sys.argv)
