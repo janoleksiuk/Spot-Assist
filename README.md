@@ -1,1 +1,8 @@
-![67bf7ce7-cf21-444e-9f12-87ac078a252a](https://github.com/user-attachments/assets/9100f8d2-9bf8-4ce2-8504-ce7617e789e3)
+# SpotAssist
+
+System for supporting people in daily activities using **Boston Dynamics Spot** robot and real-time human activity classifier.
+
+![ezgif com-speed (1)](https://github.com/user-attachments/assets/23986807-7753-41b3-9512-1ff1b075a650)
+
+
+
