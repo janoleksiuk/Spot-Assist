@@ -114,7 +114,7 @@ def run(config):
             elif (pose_code == 0) and not (current_behaviour == 'sitting' or current_behaviour == ''):
                 
                 try:
-                    exit_flag = sit(command_client)
+                    exit_flag = not sit(command_client)
                     current_behaviour = 'sitting'
                 finally:
                     command_client.robot_command(RobotCommandBuilder.stop_command())
@@ -123,7 +123,7 @@ def run(config):
             elif (pose_code == 1) and not (current_behaviour == 'standing'):
                 
                 try:
-                    exit_flag = stand(command_client)
+                    exit_flag = not stand(command_client)
                     current_behaviour = 'standing'
                 finally:
                     command_client.robot_command(RobotCommandBuilder.stop_command())
@@ -132,7 +132,7 @@ def run(config):
             elif (pose_code == 3 and current_behaviour == 'standing'):
                 
                 try:
-                    exit_flag = relative_move(0.5, 0, math.radians(0),
+                    exit_flag = not relative_move(0.5, 0, math.radians(0),
                                         command_client, robot_state_client, stairs=False)  
                     current_behaviour = 'walking'                 
                 finally:

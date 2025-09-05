@@ -24,14 +24,16 @@ from PIL import Image, UnidentifiedImageError
 from ultralytics import YOLO
 
 MODEL_PATH = r"model\yolo11n.pt"
+POSE_ENDPOINT_PATH = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\action_code.txt'
 ROT_VEL = 0.2
 FORWARD_VEL = 0.2
-FIRST_TARGET = 'suitcase'
+FIRST_TARGET = 'table'
 SECOND_TARGET = 'person'
 GRAB_OBJECT = 'bottle'
 
 task_completed = False
 robot_command_client = None
+approach = 0
 
 # approaching desired object
 def approach_object(img_client, robot_command_client, object_name, model, dist=0):
@@ -44,9 +46,13 @@ def approach_object(img_client, robot_command_client, object_name, model, dist=0
             start_rotating(robot_cmd_client, rot_vel, duration)
             time.sleep(duration)
 
-    rotation_thread = threading.Thread(target=rotation_thread_target, args=(robot_command_client, ROT_VEL, 0.5))
+    if approach == 1:
+        rotation_thread = threading.Thread(target=rotation_thread_target, args=(robot_command_client, -ROT_VEL, 0.5))
+    else:
+        rotation_thread = threading.Thread(target=rotation_thread_target, args=(robot_command_client, ROT_VEL, 0.5))
     rotation_thread.start()
-
+    approach += 1
+    
     while True:
         detections, frame = detect_objects(img_client, model, source_name='frontleft_fisheye_image')
 
@@ -167,6 +173,21 @@ def grab_object(img_client, manipulation_client, object_name, model):
 
         time.sleep(0.2)
 
+# function retrieving detected action code from endpoint (.txt file)
+def get_action():
+    while(True):
+        try:
+            with open(POSE_ENDPOINT_PATH, 'r') as f:
+                endpoint_content = f.read().strip()  # strip removes any newlines or spaces
+                if endpoint_content == '':
+                    continue
+                detected_action = int(endpoint_content)
+                return detected_action
+            
+        except FileNotFoundError:
+            print("Endpoint file not found.")
+            continue
+
 def main():
     # Initial auto-setup
     global robot_command_client, robot_state_client
@@ -195,27 +216,32 @@ def main():
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
             robot.power_on(timeout_sec=20)
             assert robot.is_powered_on(), "Failed to power on Spot"
-            blocking_stand(robot_command_client, timeout_sec=10)
-            time.sleep(1)
-            
-            #approach grabbable object
-            obj_approached = False
-            obj_approached = approach_object(image_client, robot_command_client, object_name=FIRST_TARGET, model=model, dist=1)
-            time.sleep(1)
-            
-            # HERE GRAB OBJ
-            obj_grabbed = False
-            obj_grabbed = grab_object(image_client, manipulation_client, object_name=GRAB_OBJECT, model=model)
-            time.sleep(1)
 
-            # # deliver object to person
-            human_approached = False
-            human_approached = approach_object(image_client, robot_command_client, object_name=SECOND_TARGET, model=model, dist=2)
-            time.sleep(1)
-            
-            # HERE RELEASE OBJ
-            raise_arm(robot_command_client)
-            time.sleep(2)
+            # waiting for appropiate pose
+            while True:
+                if not get_action() == 1: # code action 1 = sit -> stand -> sit
+                    time.sleep(0.5)
+                else:
+                    blocking_stand(robot_command_client, timeout_sec=10)
+                    time.sleep(1)
+                    
+                    #approach grabbable object
+                    obj_approached = approach_object(image_client, robot_command_client, object_name=FIRST_TARGET, model=model, dist=1)
+                    time.sleep(1)
+                    
+                    # HERE GRAB OBJ
+                    obj_grabbed = grab_object(image_client, manipulation_client, object_name=GRAB_OBJECT, model=model)
+                    time.sleep(1)
+
+                    # # deliver object to person
+                    human_approached = approach_object(image_client, robot_command_client, object_name=SECOND_TARGET, model=model, dist=1.5)
+                    time.sleep(1)
+                    
+                    # HERE RELEASE OBJ
+                    raise_arm(robot_command_client)
+                    time.sleep(3)
+                    task_completed = obj_approached and obj_grabbed and human_approached
+                    break
 
     except Exception as e:
         print(f"An exception occurred: {e}")
@@ -225,11 +251,18 @@ def main():
             if not task_completed and robot and robot.is_powered_on():
                 stop_moving(robot_command_client)
                 robot_command_client.robot_command(RobotCommandBuilder.claw_gripper_open_command())
-                time.sleep(2.0)
+                time.sleep(2)
                 robot_command_client.robot_command(RobotCommandBuilder.arm_stow_command())
-                time.sleep(2.0)
+                time.sleep(2)
                 robot_command_client.robot_command(RobotCommandBuilder.synchro_sit_command())
-                time.sleep(3.0)
+                time.sleep(3)
+                robot.power_off(cut_immediately=False, timeout_sec=20)
+            else:
+               stop_moving(robot_command_client)
+               time.sleep(1)
+               robot_command_client.robot_command(RobotCommandBuilder.synchro_sit_command())
+               time.sleep(2) 
+               robot.power_off(cut_immediately=False, timeout_sec=20)
 
         except Exception as e:
             print(f"Shutdown failed: {e}")
@@ -238,4 +271,5 @@ def main():
         print("Spot operation completed. Exiting.")
 
 if __name__ == '__main__':
-    main()
+    if not main():
+        sys.exit(1)

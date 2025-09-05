@@ -239,7 +239,6 @@ def print_metrics(y_test, predictions):
 	predictions=predictions.astype(int)
 	print('Confusion Matrix')
 	print(y_test,predictions)
-	# print(confusion_matrix(y_test, predictions))
 	print('Precision: {}'.format(precision_score(y_test, predictions, average = 'macro')))
 	print('Recall: {}'.format(recall_score(y_test, predictions, average = 'macro')))
 	print('F1: {}'.format(f1_score(y_test, predictions, average='macro')))
@@ -251,16 +250,12 @@ def main(argv):
 	shm = shared_memory.SharedMemory(name=shm_detected_posed_code)
 
 	def cleanup(signum=None, frame=None):
-		print("[Predictor Module]: cleaning up shared memory...")
+		print("[Classifier Module]: cleaning up shared memory...")
 		shm.close()
 		exit(0)
 
 	signal.signal(signal.SIGTERM, cleanup)
 	signal.signal(signal.SIGINT, cleanup)
-
-	# waiting for body_tracking module initialization
-	# print("Waiting for camera...")
-	# time.sleep(5)
 
 	#import model
 	model_dir = assemble_dir("\\pose-classifier" + MODEL_PATH)

@@ -47,6 +47,7 @@ def main():
         
         print("All processes terminated")
         sys.exit(0)
+
     # Register signal handlers
     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
@@ -58,18 +59,24 @@ def main():
         p1 = subprocess.Popen(["python",tracker_dir])
         processes.append(p1)
 
-        # Launch predictor
+        # Launch pose classifier
         print("Launching predictor...")
-        predictor_dir = assemble_dir(str_subfolder="\\pose-classifier\\pnn.py")
-        p2 = subprocess.Popen(["python", predictor_dir, DETECTED_POSE_MEMORY_NAME])
+        classifier_dir = assemble_dir(str_subfolder="\\pose-classifier\\pnn.py")
+        p2 = subprocess.Popen(["python", classifier_dir, DETECTED_POSE_MEMORY_NAME])
         processes.append(p2)
 
+        # Launch action detector
+        print("Launching action detector...")
+        detector_dir = assemble_dir(str_subfolder="\\launch\\detect_human_Action.py")
+        p3 = subprocess.Popen(["python", detector_dir, DETECTED_POSE_MEMORY_NAME])
+        processes.append(p3)
 
         print("All processes started. Press Ctrl+C to quit.")
         
         # Wait for processes to complete
         p1.wait()
         p2.wait()
+        p3.wait()
 
     except KeyboardInterrupt:
         # This will be caught by the signal handler

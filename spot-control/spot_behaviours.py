@@ -59,14 +59,14 @@ def relative_move(dx, dy, dyaw, robot_command_client, robot_state_client, frame_
         
         if mobility_feedback.status != RobotCommandFeedbackStatus.STATUS_PROCESSING:
             print("--- WALKING: FAILED ---")
-            return True
+            return False
         
         traj_feedback = mobility_feedback.se2_trajectory_feedback
 
         if (traj_feedback.status == traj_feedback.STATUS_AT_GOAL and
                 traj_feedback.body_movement_status == traj_feedback.BODY_STATUS_SETTLED):
             print("--- WALKING: SUCCESS ---")
-            return False
+            return True
         
         time.sleep(1)
 
@@ -89,12 +89,12 @@ def sit(client):
         # Check if command succeeded
         if sit_feedback.status == sit_feedback.STATUS_IS_SITTING:
             print("--- SITTING: SUCCESS ---")
-            return False
+            return True
         
         # Check if command failed
         elif mobility_feedback.status != RobotCommandFeedbackStatus.STATUS_PROCESSING:
             print("--- SITTING: FAILED ---")
-            return True
+            return False
             
         # Wait before checking again
         time.sleep(0.5)
@@ -118,12 +118,12 @@ def stand(client):
         # Check if command succeeded
         if stand_feedback.status == stand_feedback.STATUS_IS_STANDING:
             print("--- STANDING: SUCCESS ---")
-            return False
+            return True
         
         # Check if command failed
         elif mobility_feedback.status != RobotCommandFeedbackStatus.STATUS_PROCESSING:
             print("--- STANDING: FAILED ---")
-            return True
+            return False
 
         # Wait before checking again
         time.sleep(0.5)
@@ -136,9 +136,11 @@ def start_rotating(client, rot_velocity, duration_sec = 2):
         cmd = RobotCommandBuilder.synchro_velocity_command(0, 0, rot_velocity)
         robot_command = RobotCommandBuilder.build_synchro_command(cmd)
         client.robot_command(robot_command, end_time_secs=time.time() + duration_sec)
+        return True
     except Exception as e:
         print(f"Failed to perform rotation: {e}")
         client.robot_command(RobotCommandBuilder.stop_command())
+        return False
 
 # stop moving - including rotating
 def stop_moving(client):
@@ -148,32 +150,41 @@ def stop_moving(client):
         cmd = RobotCommandBuilder.synchro_velocity_command(0, 0, 0)
         robot_command = RobotCommandBuilder.build_synchro_command(cmd)
         client.robot_command(robot_command, end_time_secs=time.time() + 1.0)
+        return True
     except Exception as e:
         print(f"Failed to stop motion: {e}")
         client.robot_command(RobotCommandBuilder.stop_command())
+        return False
 
 # raising arm
 def raise_arm(client):
-    sh0 = 0.0
-    sh1 = -1.5
-    el0 = 2.5
-    el1 = 0.0
-    wr0 = -1.5
-    wr1 = 0.0
+    try:
+        sh0 = 0.0
+        sh1 = -1.5
+        el0 = 2.5
+        el1 = 0.0
+        wr0 = -1.5
+        wr1 = 0.0
 
-    traj_point = RobotCommandBuilder.create_arm_joint_trajectory_point(
-        sh0, sh1, el0, el1, wr0, wr1, time_since_reference_secs=1.0)
+        traj_point = RobotCommandBuilder.create_arm_joint_trajectory_point(
+            sh0, sh1, el0, el1, wr0, wr1, time_since_reference_secs=1.0)
 
-    arm_joint_traj = arm_command_pb2.ArmJointTrajectory(points=[traj_point])
-    joint_move_cmd = arm_command_pb2.ArmJointMoveCommand.Request(trajectory=arm_joint_traj)
-    arm_cmd = arm_command_pb2.ArmCommand.Request(arm_joint_move_command=joint_move_cmd)
-    sync_cmd = synchronized_command_pb2.SynchronizedCommand.Request(arm_command=arm_cmd)
-    robot_cmd = robot_command_pb2.RobotCommand(synchronized_command=sync_cmd)
-    full_cmd = RobotCommandBuilder.build_synchro_command(robot_cmd)
-    print("Lifting the arm after grasping...")
-    client.robot_command(full_cmd)
-    time.sleep(2.0)
-    print("Arm lift completed. Preparing for the delivery phase.")
+        arm_joint_traj = arm_command_pb2.ArmJointTrajectory(points=[traj_point])
+        joint_move_cmd = arm_command_pb2.ArmJointMoveCommand.Request(trajectory=arm_joint_traj)
+        arm_cmd = arm_command_pb2.ArmCommand.Request(arm_joint_move_command=joint_move_cmd)
+        sync_cmd = synchronized_command_pb2.SynchronizedCommand.Request(arm_command=arm_cmd)
+        robot_cmd = robot_command_pb2.RobotCommand(synchronized_command=sync_cmd)
+        full_cmd = RobotCommandBuilder.build_synchro_command(robot_cmd)
+        print("Lifting the arm after grasping...")
+        client.robot_command(full_cmd)
+        time.sleep(2.0)
+        print("Arm lift completed. Preparing for the delivery phase.")
+        return True
+    
+    except Exception as e:
+        print(f"Arm raising exception caught: {e}")
+        client.robot_command(RobotCommandBuilder.stop_command())
+        return False
 
 # moving froward with controlled velocity
 def move_forward(client, fwd_vel, duration_sec=0.5):
@@ -184,7 +195,9 @@ def move_forward(client, fwd_vel, duration_sec=0.5):
         robot_command = RobotCommandBuilder.build_synchro_command(cmd)
         client.robot_command(robot_command, end_time_secs=time.time() + duration_sec)
         time.sleep(duration_sec)
+        return True
 
     except Exception as e:
         print(f"Failed to move forward: {e}")
         client.robot_command(RobotCommandBuilder.stop_command())
+        return False

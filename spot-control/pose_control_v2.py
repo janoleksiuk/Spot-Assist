@@ -36,7 +36,6 @@ POSE_ENDPOINT_PATH = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\acti
 
 #function retrieving detected action code from endpoint (.txt file)
 def get_action():
-
     while(True):
         try:
             with open(POSE_ENDPOINT_PATH, 'r') as f:
@@ -52,7 +51,6 @@ def get_action():
 
 # function freezing - wait t second
 def countdown(t):
-
     i = 0   
     while(i<t+1):
         print(t - i)
@@ -99,13 +97,13 @@ def run(config):
         # Main loop
         while(True):
 
-            action_code = get_action() # 0 - sitting; 1 - standing;  2- sitting_1hand; 3 - standing_1hand
+            action_code = get_action() 
             
             #behaviour for sequence sit -> stand -> sit
             if (action_code == 1) and (prev_action != 1):
                 
                 try:
-                    exit_flag = stand(command_client)
+                    exit_flag = not stand(command_client)
                     prev_action = 1
                 finally:
                     command_client.robot_command(RobotCommandBuilder.stop_command())
@@ -114,7 +112,7 @@ def run(config):
             if (action_code == 2) and (prev_action != 2):
                 
                 try:
-                    exit_flag = sit(command_client)
+                    exit_flag = not sit(command_client)
                 finally:
                     command_client.robot_command(RobotCommandBuilder.stop_command())
 
