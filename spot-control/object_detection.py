@@ -44,7 +44,7 @@ def detect_objects(image_client, model, confidence=0.4, source_name='hand_color_
             label = result.names[cls]
             detections.append({'label': label, 'conf': conf, 'bbox': (x1, y1, x2, y2)})
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame, f'{label} {conf:.2f}', (x1, y1 - 10),
+            cv2.putText(frame, f'{label} {conf:.2f}', (x1, y2 - 15),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             
     if save:
@@ -106,4 +106,4 @@ def compute_depth_to_object(image_client, bbox, source_name='hand_depth_in_hand_
         
 # save photo
 def save_photo(frame, source : str):
-    cv2.imwrite(source + f"-{datetime.now().date()}.jpg", frame)
+    cv2.imwrite(source + datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".jpg", frame)

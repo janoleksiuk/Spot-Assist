@@ -178,7 +178,7 @@ def raise_arm(client):
         print("Lifting the arm after grasping...")
         client.robot_command(full_cmd)
         time.sleep(2.0)
-        print("Arm lift completed. Preparing for the delivery phase.")
+        print("Arm lift completed.")
         return True
     
     except Exception as e:

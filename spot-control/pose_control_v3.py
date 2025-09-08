@@ -17,7 +17,7 @@ from bosdyn.client import frame_helpers
 
 from spot_behaviours import start_rotating, stop_moving, relative_move, raise_arm, move_forward
 from object_detection import detect_objects, compute_depth_to_object
-from spot_utils import print_battery_state
+from spot_utils import print_battery_level
 
 import cv2
 import numpy as np
@@ -28,16 +28,12 @@ MODEL_PATH = r"model\yolo11n.pt"
 POSE_ENDPOINT_PATH = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\action_code.txt'
 ROT_VEL = 0.2
 FORWARD_VEL = 0.2
-FIRST_TARGET = 'table'
+FIRST_TARGET = 'bottle'
 SECOND_TARGET = 'person'
 GRAB_OBJECT = 'bottle'
 
-task_completed = False
-robot_command_client = None
-approach = 0
-
 # approaching desired object
-def approach_object(img_client, robot_command_client, object_name, model, dist=0):
+def approach_object(robot_command_client, img_client, robot_state_client, object_name, model, dist=0, approach=0):
     object_found = False
     stop_rotation_thread = threading.Event()
     
@@ -49,13 +45,14 @@ def approach_object(img_client, robot_command_client, object_name, model, dist=0
 
     if approach == 1:
         rotation_thread = threading.Thread(target=rotation_thread_target, args=(robot_command_client, -ROT_VEL, 0.5))
+        source_name = 'frontright_fisheye_image'
     else:
         rotation_thread = threading.Thread(target=rotation_thread_target, args=(robot_command_client, ROT_VEL, 0.5))
+        source_name = 'frontleft_fisheye_image'
     rotation_thread.start()
-    approach += 1
     
     while True:
-        detections, frame = detect_objects(img_client, model, source_name='frontleft_fisheye_image')
+        detections, frame = detect_objects(img_client, model, source_name=source_name)
 
         for det in detections:
             if det['label'] == object_name:
@@ -66,7 +63,7 @@ def approach_object(img_client, robot_command_client, object_name, model, dist=0
                 print(offset_px)
                 
                 # 15 - precise depth measurement - needs correction / 200 - forward trajectory
-                if offset_px < 200:
+                if offset_px < 140:
 
                     object_found = True
             
@@ -93,7 +90,7 @@ def approach_object(img_client, robot_command_client, object_name, model, dist=0
         robot_command_client.robot_command(RobotCommandBuilder.stop_command())
 
     # exiting if relative_move malfunctions - returns False as approaching failed
-    if exit_flag:
+    if not exit_flag:
         print("Approaching to object failed")
         return False
     
@@ -101,7 +98,7 @@ def approach_object(img_client, robot_command_client, object_name, model, dist=0
     return True
 
 # grabbing desired object
-def grab_object(img_client, manipulation_client, object_name, model):
+def grab_object(robot_command_client, img_client, manipulation_client, object_name, model):
     object_grabbed = False
     object_detected = False
 
@@ -190,15 +187,13 @@ def get_action():
             continue
 
 def main():
-    # Initial auto-setup
-    global robot_command_client, robot_state_client
-
     parser = argparse.ArgumentParser()
     bosdyn.client.util.add_base_arguments(parser)
     parser.add_argument('--camera-source', default='hand_color_image', help='Using camera source')
     options = parser.parse_args()
 
     try:
+        task_completed = False
         bosdyn.client.util.setup_logging(options.verbose)
         sdk = bosdyn.client.create_standard_sdk('SpotAssist')
         robot = sdk.create_robot(options.hostname)
@@ -224,26 +219,33 @@ def main():
             # waiting for appropiate pose
             while True:
                 if not get_action() == 1: # code action 1 = sit -> stand -> sit
+                #if False:
                     time.sleep(0.5)
                 else:
+                    DEMO_APPROACH = 0
                     blocking_stand(robot_command_client, timeout_sec=10)
                     time.sleep(1)
-                    
+
                     #approach grabbable object
-                    obj_approached = approach_object(image_client, robot_command_client, object_name=FIRST_TARGET, model=model, dist=1)
+                    obj_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=FIRST_TARGET, model=model, dist=1, approach=DEMO_APPROACH)
                     time.sleep(1)
-                    
+                    DEMO_APPROACH = 1
+
                     # HERE GRAB OBJ
-                    obj_grabbed = grab_object(image_client, manipulation_client, object_name=GRAB_OBJECT, model=model)
+                    obj_grabbed = grab_object(robot_command_client, image_client, manipulation_client, object_name=GRAB_OBJECT, model=model)
+                    time.sleep(1)
+
+                    raise_arm(robot_command_client)
                     time.sleep(1)
 
                     # # deliver object to person
-                    human_approached = approach_object(image_client, robot_command_client, object_name=SECOND_TARGET, model=model, dist=1.5)
+                    human_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=SECOND_TARGET, model=model, dist=1, approach=DEMO_APPROACH)
+                    time.sleep(2)
+                    robot_command_client.robot_command(RobotCommandBuilder.claw_gripper_open_command())
                     time.sleep(1)
-                    
-                    # HERE RELEASE OBJ
-                    raise_arm(robot_command_client)
-                    time.sleep(3)
+
+                    move_forward(robot_command_client, fwd_vel=-0.5, duration_sec=1)
+
                     task_completed = obj_approached and obj_grabbed and human_approached
                     break
 
@@ -252,20 +254,21 @@ def main():
 
     finally:
         try:
-            if not task_completed and robot and robot.is_powered_on():
+            if not task_completed:
+                print("TASK NOT FULLY COMPLETED")
                 stop_moving(robot_command_client)
-                robot_command_client.robot_command(RobotCommandBuilder.claw_gripper_open_command())
-                time.sleep(2)
+                time.sleep(1)
                 robot_command_client.robot_command(RobotCommandBuilder.arm_stow_command())
-                time.sleep(2)
+                time.sleep(1)
                 robot_command_client.robot_command(RobotCommandBuilder.synchro_sit_command())
-                time.sleep(3)
+                time.sleep(1)
                 robot.power_off(cut_immediately=False, timeout_sec=20)
             else:
+               print("TASK COMPLETED")
                stop_moving(robot_command_client)
                time.sleep(1)
                robot_command_client.robot_command(RobotCommandBuilder.synchro_sit_command())
-               time.sleep(2) 
+               time.sleep(1) 
                robot.power_off(cut_immediately=False, timeout_sec=20)
 
         except Exception as e:
