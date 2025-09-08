@@ -19,8 +19,10 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 from ultralytics import YOLO
 
+from datetime import datetime
+
 # detecting objects using YOLO model
-def detect_objects(image_client, model, confidence=0.4, source_name='hand_color_image'):
+def detect_objects(image_client, model, confidence=0.4, source_name='hand_color_image', save=True):
 
     # retrieving image from spot camera (source name)
     response = image_client.get_image_from_sources([source_name])[0]
@@ -32,7 +34,7 @@ def detect_objects(image_client, model, confidence=0.4, source_name='hand_color_
         frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
     
     # determing detected objects within frame
-    results = model(frame, conf=confidence, verbose=False, show=True)
+    results = model(frame, conf=confidence, verbose=False, show=False)
     detections = []
     for result in results:
         for box in result.boxes:
@@ -44,6 +46,9 @@ def detect_objects(image_client, model, confidence=0.4, source_name='hand_color_
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.putText(frame, f'{label} {conf:.2f}', (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            
+    if save:
+        save_photo(frame=frame, source=source_name)
             
     return detections, frame
 
@@ -98,3 +103,7 @@ def compute_depth_to_object(image_client, bbox, source_name='hand_depth_in_hand_
         
         if corr_cnt == int(25):
             return output_depth/25.0
+        
+# save photo
+def save_photo(frame, source : str):
+    cv2.imwrite(source + f"-{datetime.now().date()}.jpg", frame)
