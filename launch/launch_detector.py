@@ -68,7 +68,7 @@ def main():
         # Launch action detector
         print("Launching action detector...")
         detector_dir = assemble_dir(str_subfolder="\\launch\\detect_human_Action.py")
-        p3 = subprocess.Popen(["python", detector_dir, DETECTED_POSE_MEMORY_NAME])
+        p3 = subprocess.Popen(["python", detector_dir])
         processes.append(p3)
 
         print("All processes started. Press Ctrl+C to quit.")

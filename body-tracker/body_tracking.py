@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime
 from multiprocessing import shared_memory
 import time
+import signal
 
 BODY_IDX = 34
 CONFIDENCE_THR = 40 # confidence of body_point detection
@@ -14,11 +15,9 @@ FREQ = 2 # fps = 30/FREQ
 PNN_INPUT_MEMORY_NAME = "pnn_input"
 DETECTED_POSE_MEMORY_NAME = "detected_pose_code_shm"
 
-# FPS 30 #
 
 #filtering - simple moving mean
 def apply_moving_mean(df, window_size):
-
     # Create a copy of the original DataFrame to avoid modifying it
     result_df = df.copy()
     
@@ -30,6 +29,7 @@ def apply_moving_mean(df, window_size):
         result_df[column] = df[column].rolling(window=window_size, min_periods=1).mean()
     
     return result_df
+
 
 #preprocessing - rearagning acquired input from 34 raw 3d keypoints data to 19 filtered 3d keypoints data with default label
 def process_df(df):
@@ -104,12 +104,33 @@ def process_df(df):
     
     return df
 
-def main():
 
+#postprocessing - outputing session completed csv
+def save_session(keypoints_blocks, header, postprocess=False):
+    # Save keypoint data blocks to output CSV
+    print("[Body tracker]: Saving session data to csv")
+    session_3d_matrix = np.vstack(keypoints_blocks)
+    session_df = pd.DataFrame(session_3d_matrix, columns = header)
+    if postprocess:
+        session_df = process_df(df=session_df)
+    session_df.to_csv(f"session_{datetime.now().date()}.csv" , index= False)
+
+
+def main():
     # Create communication variables
     detected_pose_code_shm = shared_memory.SharedMemory(name=DETECTED_POSE_MEMORY_NAME) # init it first !!!
     received_data_shape = (1,)
     array_dtype = np.int64
+
+    #handling termination from parent process
+    def cleanup(signum=None, frame=None):
+        print("[Detector Module]: cleaning up shared memory and saving session data...")
+        save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
+        #smh.close()
+        exit(0)
+
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
     
     # Create a Camera object
     zed = sl.Camera()
@@ -180,6 +201,7 @@ def main():
     i = 0 
     body_detected_idx = 0
     keypoint_3d_row = np.ones((BODY_IDX*3), dtype=float)
+    keypoint_3d_blocks = []
 
     #create frame
     # Create the window with a name
@@ -232,6 +254,7 @@ def main():
                     for k in range (0, body_detected_idx):
                         keypoint_3d_matrix[k] = keypoint_3d_array[k*102:k*102+102]
                     
+                    keypoint_3d_blocks.append(keypoint_3d_matrix)
                     df = pd.DataFrame(keypoint_3d_matrix, columns = header)
 
                     # preprocess data
@@ -251,7 +274,7 @@ def main():
                     pose_string = poses_dict[str(pose_value_arr)]
 
                 except Exception as e:
-                    print(f"Bład: {e}")
+                    print(f"Error: {e}")
 
                 cv2.putText(
                     img_cv,                     # Image to draw on
@@ -271,8 +294,8 @@ def main():
                 key = cv2.waitKey(10)
                 if key == 27:  # ESC key
                     detected_pose_code_shm.close()
+                    save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
                     break
-                    
             i += 1
 
         # Close the camera and destroy windows
@@ -282,6 +305,7 @@ def main():
     
     except KeyboardInterrupt:
         detected_pose_code_shm.close()
+        save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
 
 if __name__ == "__main__":
     main()
