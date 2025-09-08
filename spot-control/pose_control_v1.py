@@ -31,6 +31,7 @@ from bosdyn.client.robot_command import (
 from bosdyn.client.robot_state import RobotStateClient
 
 from spot_behaviours import relative_move, sit, stand
+from spot_utils import print_battery_level
 
 POSE_ENDPOINT_PATH = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt'
 
@@ -77,7 +78,7 @@ def run(config):
         state = robot_state_client.get_robot_state()
 
         # acknowledge with battery state and press a to continue
-        print("BATTERY STATE: " + str(state.battery_states))
+        print_battery_level(state)
         print("PRESS 'a' to proceed.")
         while True:
             user_input = input("Input: ")

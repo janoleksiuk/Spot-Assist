@@ -17,7 +17,7 @@ from pathlib import Path
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-MODEL_PATH = "\\model\\model.csv"
+MODEL_PATH = "\\reference_data\\reference_data.csv"
 
 # file direct0ry creator function - for launcher usage
 def assemble_dir(str_subfolder: str) -> str:

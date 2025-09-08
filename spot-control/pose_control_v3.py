@@ -17,6 +17,7 @@ from bosdyn.client import frame_helpers
 
 from spot_behaviours import start_rotating, stop_moving, relative_move, raise_arm, move_forward
 from object_detection import detect_objects, compute_depth_to_object
+from spot_utils import print_battery_state
 
 import cv2
 import numpy as np
@@ -209,6 +210,9 @@ def main():
         image_client = robot.ensure_client(ImageClient.default_service_name)
         manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
         robot_state_client = robot.ensure_client(RobotStateClient.default_service_name)
+        
+        state = robot_state_client.get_robot_state()
+        print_battery_level(state)
 
         model = YOLO(MODEL_PATH)
         print(f"Loading the YOLOv11 model : {MODEL_PATH}")
