@@ -3,7 +3,8 @@ import time
 import signal
 import sys
 from pathlib import Path 
-from launch.memory_management import memory_init, DETECTED_POSE_MEMORY_NAME
+from launch.memory_management import memory_init, DETECTED_POSE_MEMORY_NAME, \
+                                                  DETECTED_ACTION_MEMORY_NAME
 
 # file direcotry creator function
 def assemble_dir(*parts: str) -> str:
@@ -67,7 +68,8 @@ def launch():
         # Launch action detector
         print("Launching action detector...")
         detector_dir = assemble_dir("pose-classifier", "detect_human_action.py")
-        p3 = subprocess.Popen(["python", detector_dir, DETECTED_POSE_MEMORY_NAME])
+        p3 = subprocess.Popen(["python", detector_dir, DETECTED_POSE_MEMORY_NAME, 
+                                                       DETECTED_ACTION_MEMORY_NAME])
         processes.append(p3)
 
         print("All processes started. Press Ctrl+C to quit.")
