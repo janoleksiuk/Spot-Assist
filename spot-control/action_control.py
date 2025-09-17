@@ -2,8 +2,11 @@ import argparse
 import sys
 import time
 import signal
-import io
 import threading
+import cv2
+import numpy as np
+from ultralytics import YOLO
+from multiprocessing import shared_memory
 
 import bosdyn.client
 import bosdyn.client.util
@@ -18,14 +21,10 @@ from bosdyn.client import frame_helpers
 from utils.spot_behaviours import start_rotating, stop_moving, relative_move, raise_arm, move_forward
 from utils.object_detection import detect_objects, compute_depth_to_object
 from utils.spot_utils import print_battery_level
+from utils.shared_memory import DETECTED_ACTION_MEMORY_NAME
 
-import cv2
-import numpy as np
-from PIL import Image, UnidentifiedImageError
-from ultralytics import YOLO
 
 MODEL_PATH = r"model\yolo11n.pt"
-POSE_ENDPOINT_PATH = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\action_code.txt'
 ROT_VEL = 0.2
 FORWARD_VEL = 0.2
 FIRST_TARGET = 'bottle'
@@ -171,22 +170,27 @@ def grab_object(robot_command_client, img_client, manipulation_client, object_na
 
         time.sleep(0.2)
 
-# function retrieving detected action code from endpoint (.txt file)
-def get_action():
-    while(True):
-        try:
-            with open(POSE_ENDPOINT_PATH, 'r') as f:
-                endpoint_content = f.read().strip()  # strip removes any newlines or spaces
-                if endpoint_content == '':
-                    continue
-                detected_action = int(endpoint_content)
-                return detected_action
-            
-        except FileNotFoundError:
-            print("Endpoint file not found.")
-            continue
+#function retrieving detected action code from endpoint
+def get_action(received_data_shape, shm_buffer):
+    try:
+        action_value_arr = np.ndarray(received_data_shape, dtype=np.int64, buffer=shm_buffer.buf)
+        return action_value_arr[0]
+    except Exception as e:
+        print(f"[SPOT CONTROL]: Error while getting pose value: {e}")
+        return 0
 
 def main():
+    shm_detected_action = shared_memory.SharedMemory(name=DETECTED_ACTION_MEMORY_NAME) 
+    shm_detected_action_received_data_shape = (1,)
+
+    def cleanup(signum=None, frame=None):
+        print("[SPOT CONTROL]: cleaning up shared memory...")
+        shm_detected_action.close()
+        exit(0)
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
+
+    bosdyn.client.util.setup_logging(config.verbose)
     parser = argparse.ArgumentParser()
     bosdyn.client.util.add_base_arguments(parser)
     parser.add_argument('--camera-source', default='hand_color_image', help='Using camera source')
@@ -218,8 +222,8 @@ def main():
 
             # waiting for appropiate pose
             while True:
-                if not get_action() == 1: # code action 1 = sit -> stand -> sit
-                #if False:
+                if not get_action(received_data_shape=shm_detected_action_received_data_shape, shm_buffer=shm_detected_action) == 1: 
+                # code action 1 = sit -> stand -> sit
                     time.sleep(0.5)
                 else:
                     DEMO_APPROACH = 0
@@ -275,6 +279,7 @@ def main():
             print(f"Shutdown failed: {e}")
 
         cv2.destroyAllWindows()
+        shm_detected_action.close()
         print("Spot operation completed. Exiting.")
 
 if __name__ == '__main__':

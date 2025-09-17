@@ -1,9 +1,11 @@
 import argparse
 import logging
-import math
+import numpy as np
 import sys
 import time
 import traceback
+import signal
+from multiprocessing import shared_memory
 
 import bosdyn.client
 import bosdyn.client.estop
@@ -30,25 +32,18 @@ from bosdyn.client.robot_command import (
 )
 from bosdyn.client.robot_state import RobotStateClient
 
-from utils.spot_behaviours import relative_move, sit, stand
+from utils.spot_behaviours import sit, stand
 from utils.spot_utils import print_battery_state
+from utils.shared_memory import DETECTED_ACTION_MEMORY_NAME
 
-POSE_ENDPOINT_PATH = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\action_code.txt'
-
-#function retrieving detected action code from endpoint (.txt file)
-def get_action():
-    while(True):
-        try:
-            with open(POSE_ENDPOINT_PATH, 'r') as f:
-                endpoint_content = f.read().strip()  # strip removes any newlines or spaces
-                if endpoint_content == '':
-                    continue
-                detected_action = int(endpoint_content)
-                return detected_action
-            
-        except FileNotFoundError:
-            print("Endpoint file not found.")
-            continue
+#function retrieving detected action code from endpoint
+def get_action(received_data_shape, shm_buffer):
+    try:
+        action_value_arr = np.ndarray(received_data_shape, dtype=np.int64, buffer=shm_buffer.buf)
+        return action_value_arr[0]
+    except Exception as e:
+        print(f"[SPOT CONTROL]: Error while getting pose value: {e}")
+        return 0
 
 # function freezing - wait t second
 def countdown(t):
@@ -60,7 +55,15 @@ def countdown(t):
 
 # main program
 def run(config):
+    shm_detected_action = shared_memory.SharedMemory(name=DETECTED_ACTION_MEMORY_NAME) 
+    shm_detected_action_received_data_shape = (1,)
 
+    def cleanup(signum=None, frame=None):
+        print("[SPOT CONTROL]: cleaning up shared memory...")
+        shm_detected_action.close()
+        exit(0)
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
     bosdyn.client.util.setup_logging(config.verbose)
 
     sdk = bosdyn.client.create_standard_sdk('StanceClient')
@@ -77,7 +80,7 @@ def run(config):
         state = robot_state_client.get_robot_state()
 
         # acknowledge with battery state and press a to continue
-        print_battery_level(state)
+        print_battery_state(state)
         print("PRESS 'a' to proceed.")
         while True:
             user_input = input("Input: ")
@@ -98,7 +101,7 @@ def run(config):
         # Main loop
         while(True):
 
-            action_code = get_action() 
+            action_code = get_action(received_data_shape=shm_detected_action_received_data_shape, shm_buffer=shm_detected_action)  
             
             #behaviour for sequence sit -> stand -> sit
             if (action_code == 1) and (prev_action != 1):
@@ -119,6 +122,7 @@ def run(config):
 
             if exit_flag:
                 print("--- EXIT ---")
+                shm_detected_action.close()
                 break
 
         robot.power_off(cut_immediately=False, timeout_sec=20)

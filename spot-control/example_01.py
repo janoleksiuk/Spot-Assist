@@ -4,6 +4,9 @@ import math
 import sys
 import time
 import traceback
+from multiprocessing import shared_memory
+import numpy as np
+import signal
 
 import bosdyn.client
 import bosdyn.client.estop
@@ -32,23 +35,17 @@ from bosdyn.client.robot_state import RobotStateClient
 
 from utils.spot_behaviours import relative_move, sit, stand
 from utils.spot_utils import print_battery_level
+from utils.shared_memory import DETECTED_POSE_MEMORY_NAME
 
-POSE_ENDPOINT_PATH = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt'
 
-#function retrieving detected pose code from endpoint (.txt file)
-def get_pose():
-
-    while(True):
-        try:
-            with open(POSE_ENDPOINT_PATH, 'r') as f:
-                endpoint_content = f.read().strip()  # strip removes any newlines or spaces
-                if endpoint_content == '':
-                    continue
-                detected_pose = int(endpoint_content)
-                return detected_pose
-        except FileNotFoundError:
-            print("Endpoint file not found.")
-            continue
+#function retrieving detected pose code from endpoint 
+def get_pose(received_data_shape, shm_buffer):
+    try:
+        pose_value_arr = np.ndarray(received_data_shape, dtype=np.int64, buffer=shm_buffer.buf)
+        return pose_value_arr[0]
+    except Exception as e:
+        print(f"[sPOT CONTROL]: Error while getting pose value: {e}")
+        return 0
 
 # function freezing - wait t second
 def countdown(t):
@@ -61,6 +58,15 @@ def countdown(t):
 
 # main program
 def run(config):
+    shm_detected_pose = shared_memory.SharedMemory(name=DETECTED_POSE_MEMORY_NAME) 
+    shm_detected_pose_received_data_shape = (1,)
+
+    def cleanup(signum=None, frame=None):
+        print("[SPOT CONTROL]: cleaning up shared memory...")
+        shm_detected_pose.close()
+        exit(0)
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
 
     bosdyn.client.util.setup_logging(config.verbose)
 
@@ -98,14 +104,15 @@ def run(config):
 
         # lauching system with sitting_1hand
         while(True):
-            if get_pose() == 2:
+            if get_pose(received_data_shape=shm_detected_pose_received_data_shape, shm_buffer=shm_detected_pose) == 2:
                 print("--- ROBOT READY --- ")
                 break
 
         # Main loop
         while(True):
 
-            pose_code = get_pose() # 0 - sitting; 1 - standing;  2- sitting_1hand; 3 - standing_1hand
+            pose_code = get_pose(received_data_shape=shm_detected_pose_received_data_shape, shm_buffer=shm_detected_pose) 
+            # 0 - sitting; 1 - standing;  2- sitting_1hand; 3 - standing_1hand
 
             if (pose_code == 2) and not (current_behaviour == ''):
                 exit_flag = True
@@ -141,6 +148,7 @@ def run(config):
 
             if exit_flag:
                 print("--- EXIT ---")
+                shm_detected_pose.close()
                 break
 
         robot.power_off(cut_immediately=False, timeout_sec=20)
