@@ -15,9 +15,9 @@ from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from bosdyn.api import geometry_pb2, manipulation_api_pb2, arm_command_pb2, robot_command_pb2, synchronized_command_pb2
 from bosdyn.client import frame_helpers
 
-from spot_behaviours import start_rotating, stop_moving, relative_move, raise_arm, move_forward
-from object_detection import detect_objects, compute_depth_to_object
-from spot_utils import print_battery_level
+from utils.spot_behaviours import start_rotating, stop_moving, relative_move, raise_arm, move_forward
+from utils.object_detection import detect_objects, compute_depth_to_object
+from utils.spot_utils import print_battery_level
 
 import cv2
 import numpy as np

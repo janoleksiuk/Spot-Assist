@@ -30,8 +30,8 @@ from bosdyn.client.robot_command import (
 )
 from bosdyn.client.robot_state import RobotStateClient
 
-from spot_behaviours import relative_move, sit, stand
-from spot_utils import print_battery_level
+from utils.spot_behaviours import relative_move, sit, stand
+from utils.spot_utils import print_battery_level
 
 POSE_ENDPOINT_PATH = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt'
 
