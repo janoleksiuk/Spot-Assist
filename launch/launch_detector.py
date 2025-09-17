@@ -4,7 +4,8 @@ import signal
 import sys
 from pathlib import Path 
 from launch.memory_management import memory_init, DETECTED_POSE_MEMORY_NAME, \
-                                                  DETECTED_ACTION_MEMORY_NAME
+                                                  DETECTED_ACTION_MEMORY_NAME, \
+                                                  PNN_INPUT_MEMORY_NAME
 
 # file direcotry creator function
 def assemble_dir(*parts: str) -> str:
@@ -17,7 +18,6 @@ def launch():
     # Init memory segments for communication
     shms = []
     shms = memory_init()
-
     processes = []
 
     # signal handler function
@@ -56,13 +56,15 @@ def launch():
         # Launch camera
         print("Launching body tracking...")
         tracker_dir = assemble_dir("body-tracker", "body_tracking.py")
-        p1 = subprocess.Popen(["python", tracker_dir, DETECTED_POSE_MEMORY_NAME])
+        p1 = subprocess.Popen(["python", tracker_dir, DETECTED_POSE_MEMORY_NAME,
+                                                      PNN_INPUT_MEMORY_NAME])
         processes.append(p1)
 
         # Launch pose classifier
         print("Launching predictor...")
         classifier_dir = assemble_dir("pose-classifier", "pnn.py")
-        p2 = subprocess.Popen(["python", classifier_dir, DETECTED_POSE_MEMORY_NAME])
+        p2 = subprocess.Popen(["python", classifier_dir, DETECTED_POSE_MEMORY_NAME,
+                                                         PNN_INPUT_MEMORY_NAME])
         processes.append(p2)
 
         # Launch action detector

@@ -7,13 +7,10 @@ from multiprocessing import shared_memory
 import sys
 import signal
 
+#TO DO - optional saving
+
 BODY_IDX = 34
 CONFIDENCE_THR = 40 # confidence of body_point detection
-FREQ = 2 # fps = 30/FREQ
-
-# shared memory segments
-PNN_INPUT_MEMORY_NAME = "pnn_input"
-
 
 #filtering - simple moving mean
 def apply_moving_mean(df, window_size):
@@ -120,6 +117,8 @@ def main(argv):
     shm_detected_pose_name = argv[1]
     shm_detected_pose = shared_memory.SharedMemory(name=shm_detected_pose_name) # init it first !!!
     received_data_shape = (1,)
+    shm_pnn_input_name = argv[2]
+    shm_pnn_input = shared_memory.SharedMemory(name=shm_pnn_input_name, size=(np.random.rand(15, 57).astype(np.float64)).nbytes)
 
     #handling termination from parent process
     def cleanup(signum=None, frame=None):
@@ -146,6 +145,7 @@ def main(argv):
     if err != sl.ERROR_CODE.SUCCESS:
         print("[Body tracker module]: Camera Open : "+repr(err)+". Exit program.")
         shm_detected_pose.close()
+        shm_pnn_input.close()
         exit()
 
     body_params = sl.BodyTrackingParameters()
@@ -170,6 +170,7 @@ def main(argv):
         print("[Body tracker module]: Enable Body Tracking : "+repr(err)+". Exit program.")
         zed.close()
         shm_detected_pose.close()
+        shm_pnn_input.close()
         exit()
     
     # Setup for visualization
@@ -246,9 +247,9 @@ def main(argv):
                             body_detected_idx +=1
                         
                 # create dataframe every 15 frames - to be used by predictor:
-                if body_detected_idx == int(30/FREQ):
+                if body_detected_idx == 15:
 
-                    #arrange 102x10 matrix from 1x1020 array  
+                    #arrange 102x15 matrix from 15x1020 array  
                     keypoint_3d_matrix = np.zeros((body_detected_idx,102), dtype = float)
                     for k in range (0, body_detected_idx):
                         keypoint_3d_matrix[k] = keypoint_3d_array[k*102:k*102+102]
@@ -259,8 +260,13 @@ def main(argv):
                     # preprocess data
                     df = process_df(df=df)
 
-                    # save df as csv in prod directory
-                    df.to_csv(r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', index= False)
+                    # writing to buffer
+                    try:    
+                        pnn_input_arr = df.to_numpy(dtype=np.float64)
+                        shm_array = np.ndarray(pnn_input_arr.shape, dtype=pnn_input_arr.dtype, buffer=shm_pnn_input.buf)
+                        shm_array[:] = pnn_input_arr[:]             
+                    except Exception as e:
+                        print(f"[Body tracking module]: Error {e} while writing pnn input array.")
 
                     #reset variables
                     body_detected_idx = 0      
@@ -273,7 +279,7 @@ def main(argv):
                     pose_string = poses_dict[str(pose_value_arr)]
 
                 except Exception as e:
-                    print(f"[Body tracker module]: Error: {e}")
+                    print(f"[Body tracker module]: Error while putting pose tring on img: {e}")
 
                 cv2.putText(
                     img_cv,                     # Image to draw on
@@ -304,6 +310,7 @@ def main(argv):
     
     except KeyboardInterrupt:
         shm_detected_pose.close()
+        shm_pnn_input.close()
         save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
 
 if __name__ == '__main__':

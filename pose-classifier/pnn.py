@@ -246,12 +246,14 @@ def main(argv):
 	# mapping onto memory segment detected pose code value holder
 	shm_detected_pose_name = argv[1]
 	shm_detected_pose = shared_memory.SharedMemory(name=shm_detected_pose_name)
+	shm_pnn_input_name = argv[2]
+	shm_pnn_input = shared_memory.SharedMemory(name=shm_pnn_input_name)
 
 	def cleanup(signum=None, frame=None):
 		print("[Classifier Module]: cleaning up shared memory...")
 		shm_detected_pose.close()
+		shm_pnn_input_name.close()
 		exit(0)
-
 	signal.signal(signal.SIGTERM, cleanup)
 	signal.signal(signal.SIGINT, cleanup)
 
