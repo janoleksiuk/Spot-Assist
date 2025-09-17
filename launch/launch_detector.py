@@ -55,7 +55,7 @@ def main():
     try:
         # Launch camera
         print("Launching body tracking...")
-        tracker_dir = assemble_dir(str_subfolder="\\body-tracker\\body_tracking.py")
+        tracker_dir = assemble_dir(str_subfolder="\\body-tracker\\body_tracking_sim.py")
         p1 = subprocess.Popen(["python",tracker_dir])
         processes.append(p1)
 
@@ -67,7 +67,7 @@ def main():
 
         # Launch action detector
         print("Launching action detector...")
-        detector_dir = assemble_dir(str_subfolder="\\launch\\detect_human_Action.py")
+        detector_dir = assemble_dir(str_subfolder="\\launch\\detect_human_action.py")
         p3 = subprocess.Popen(["python", detector_dir])
         processes.append(p3)
 

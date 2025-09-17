@@ -6,7 +6,7 @@ from datetime import datetime
 import threading
 
 BODY_IDX = 34
-FRAMES = 400
+FRAMES = 1000
 
 def process_camera(camera_id):
     # Create a Camera object

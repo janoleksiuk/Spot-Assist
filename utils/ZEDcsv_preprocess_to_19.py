@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 FILTERING = True
 PLOTTING = False
 CUSTOM_NAMING = True
-ACTIVITY = 'standing_1hand'
+ACTIVITY = 'sitting'
 
 #filtering - simple moving mean
 def apply_moving_mean(df, window_size):
@@ -99,6 +99,9 @@ def process_csv(csv_file, output_file=None):
                 df.at[i, f'x{idx}'] = row[f'x{idx}'] - x1
                 df.at[i, f'y{idx}'] = row[f'y{idx}'] - y1
                 df.at[i, f'z{idx}'] = row[f'z{idx}'] - z1
+
+            # x = -x
+                df.at[i, f'x{idx}'] = -row[f'x{idx}']
         
         # Verify keypoint1 is now at origin
         print(f"Keypoint1 coordinates after transformation (should be ~0): x={df['x1'].mean()}, y={df['y1'].mean()}, z={df['z1'].mean()}")
@@ -132,16 +135,15 @@ def process_csv(csv_file, output_file=None):
 
     #mofify label column accordingly
     # Update the labels according to the specified ranges
-    inertia = 34
+    inertia = 20
     if CUSTOM_NAMING:
-        df.loc[0:370 + inertia, 'label'] = 'sitting'       # Rows 0 to 999 (inclusive)
-        df.loc[371+ inertia:656+ inertia, 'label'] = 'standing'  # Rows 1000 to 1399 (inclusive)
-        df.loc[657+ inertia:1034+ inertia, 'label'] = 'walking'  # Rows 1400 to 1999 (inclusive)
-        df.loc[1035+ inertia:1200+ inertia, 'label'] = 'standing'       # Rows 0 to 999 (inclusive)
-        df.loc[1201+ inertia:1400+ inertia, 'label'] = 'walking'  # Rows 1000 to 1399 (inclusive)
-        df.loc[1401+ inertia:1519+ inertia, 'label'] = 'standing'
-        df.loc[1520+ inertia:1815+ inertia, 'label'] = 'sitting'       # Rows 0 to 999 (inclusive)
-        df.loc[1816+ inertia:1999, 'label'] = 'standing'
+        df.loc[0:229 + inertia, 'label'] = 'sitting'       # Rows 0 to 999 (inclusive)
+        df.loc[230+ inertia:283+ inertia, 'label'] = 'standing up'  # Rows 1000 to 1399 (inclusive)
+        df.loc[284+ inertia:340+ inertia, 'label'] = 'walking'  # Rows 1400 to 1999 (inclusive)
+        df.loc[341+ inertia:465+ inertia, 'label'] = 'picking cup'       # Rows 0 to 999 (inclusive)
+        df.loc[466+ inertia:516+ inertia, 'label'] = 'walking'  # Rows 1000 to 1399 (inclusive)
+        df.loc[517+ inertia:575+ inertia, 'label'] = 'sitting down'
+        df.loc[576: inertia:1005, 'label'] = 'sitting'       # Rows 0 to 999 (inclusive)
 
     #filtering
     # for now it is hard filtered for simulation purposes
@@ -162,7 +164,7 @@ def process_csv(csv_file, output_file=None):
 
 # Example usage:
 if __name__ == "__main__":
-    input_file = "data_34\34.csv"  # Replace with your input file
-    output_file = "data_19\19.csv"  # Replace with your desired output file
+    input_file = r"data-34\34.csv"  # Replace with your input file
+    output_file = r"data-19\19.csv"  # Replace with your desired output file
     
     processed_df = process_csv(input_file, output_file)
