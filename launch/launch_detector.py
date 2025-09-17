@@ -3,22 +3,21 @@ import time
 import signal
 import sys
 from pathlib import Path 
-from memory_management import memory_init, DETECTED_POSE_MEMORY_NAME
-
-# Global variables to track processes
-processes = []
+from launch.memory_management import memory_init, DETECTED_POSE_MEMORY_NAME
 
 # file direcotry creator function
-def assemble_dir(str_subfolder: str) -> str:
-    cwd = Path.cwd()
-    output_dir = str(cwd).replace("\\launch", str_subfolder)
-    print(output_dir)
-    return output_dir
+def assemble_dir(*parts: str) -> str:
+    project_root = Path(__file__).resolve().parent.parent  # Go up from launch/
+    full_path = project_root.joinpath(*parts)
+    print(full_path)
+    return str(full_path)
 
-def main():
+def launch():
     # Init memory segments for communication
     shms = []
     shms = memory_init()
+
+    processes = []
 
     # signal handler function
     def signal_handler(sig, frame):
@@ -55,19 +54,19 @@ def main():
     try:
         # Launch camera
         print("Launching body tracking...")
-        tracker_dir = assemble_dir(str_subfolder="\\body-tracker\\body_tracking_sim.py")
+        tracker_dir = assemble_dir("body-tracker", "body_tracking.py")
         p1 = subprocess.Popen(["python",tracker_dir])
         processes.append(p1)
 
         # Launch pose classifier
         print("Launching predictor...")
-        classifier_dir = assemble_dir(str_subfolder="\\pose-classifier\\pnn.py")
+        classifier_dir = assemble_dir("pose-classifier", "pnn.py")
         p2 = subprocess.Popen(["python", classifier_dir, DETECTED_POSE_MEMORY_NAME])
         processes.append(p2)
 
         # Launch action detector
         print("Launching action detector...")
-        detector_dir = assemble_dir(str_subfolder="\\launch\\detect_human_action.py")
+        detector_dir = assemble_dir("launch", "detect_human_action.py")
         p3 = subprocess.Popen(["python", detector_dir])
         processes.append(p3)
 
@@ -87,6 +86,3 @@ def main():
         signal_handler(None, None)
 
     print("Exiting main program")
-
-if __name__ == "__main__":
-    main()

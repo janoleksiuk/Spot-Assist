@@ -17,14 +17,13 @@ from pathlib import Path
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-MODEL_PATH = "\\reference_data\\reference_data.csv"
+MODEL_PATH = Path("pose-classifier") / "reference_data" / "reference_data.csv"
 
-# file direct0ry creator function - for launcher usage
-def assemble_dir(str_subfolder: str) -> str:
-    cwd = Path.cwd()
-    output_dir = str(cwd).replace("\\launch", str_subfolder)
-    print(output_dir)
-    return output_dir
+def assemble_dir(*parts: str) -> str:
+    project_root = Path(__file__).resolve().parent.parent  
+    full_path = project_root.joinpath(*parts)
+    print(full_path)
+    return str(full_path)
 
 # Helper function that combines the pattern layer and summation layer
 dic = {'sitting': 0, 'standing': 1, 'sitting_1hand': 2, 'standing_1hand': 3}
@@ -244,7 +243,6 @@ def print_metrics(y_test, predictions):
 	print('F1: {}'.format(f1_score(y_test, predictions, average='macro')))
 	
 def main(argv):
-
 	# mapping onto memory segment detected pose code value holder
 	shm_detected_posed_code = argv[1]
 	shm = shared_memory.SharedMemory(name=shm_detected_posed_code)
@@ -258,8 +256,8 @@ def main(argv):
 	signal.signal(signal.SIGINT, cleanup)
 
 	#import model
-	model_dir = assemble_dir("\\pose-classifier" + MODEL_PATH)
-	data1, _ = read_data.input(trainpath = model_dir, isTrain= True)
+	model_dir = assemble_dir("pose-classifier", "reference_data", "reference_data.csv")
+	data1, _ = read_data.input(trainpath=model_dir, isTrain=True)
 	
 	# prediction loop
 	while True:
@@ -284,4 +282,7 @@ def main(argv):
 			continue
 	
 if __name__ == '__main__':
-	main(sys.argv)
+	try:
+		main(sys.argv)
+	except Exception as e:
+		print(f"[Classifier module]: {e}. Error exit.")

@@ -108,7 +108,7 @@ def process_df(df):
 #postprocessing - outputing session completed csv
 def save_session(keypoints_blocks, header, postprocess=False):
     # Save keypoint data blocks to output CSV
-    print("[Body tracker]: Saving session data to csv")
+    print("[Body tracker module]: Saving session data to csv")
     session_3d_matrix = np.vstack(keypoints_blocks)
     session_df = pd.DataFrame(session_3d_matrix, columns = header)
     if postprocess:
@@ -124,7 +124,7 @@ def main():
 
     #handling termination from parent process
     def cleanup(signum=None, frame=None):
-        print("[Detector Module]: cleaning up shared memory and saving session data...")
+        print("[Body tracker module]: cleaning up shared memory...")
         save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
         #smh.close()
         exit(0)
@@ -145,7 +145,7 @@ def main():
     # Open the camera
     err = zed.open(init_params)
     if err != sl.ERROR_CODE.SUCCESS:
-        print("Camera Open : "+repr(err)+". Exit program.")
+        print("[Body tracker module]: Camera Open : "+repr(err)+". Exit program.")
         detected_pose_code_shm.close()
         exit()
 
@@ -164,11 +164,11 @@ def main():
         positional_tracking_param.set_floor_as_origin = True
         zed.enable_positional_tracking(positional_tracking_param)
 
-    print("Body tracking: Loading Module...")
+    print("[Body tracker module]: Body tracking: Loading Module...")
 
     err = zed.enable_body_tracking(body_params)
     if err != sl.ERROR_CODE.SUCCESS:
-        print("Enable Body Tracking : "+repr(err)+". Exit program.")
+        print("[Body tracker module]: Enable Body Tracking : "+repr(err)+". Exit program.")
         zed.close()
         detected_pose_code_shm.close()
         exit()
@@ -274,7 +274,7 @@ def main():
                     pose_string = poses_dict[str(pose_value_arr)]
 
                 except Exception as e:
-                    print(f"Error: {e}")
+                    print(f"[Body tracker module]: Error: {e}")
 
                 cv2.putText(
                     img_cv,                     # Image to draw on
