@@ -55,7 +55,7 @@ def launch():
         # Launch camera
         print("Launching body tracking...")
         tracker_dir = assemble_dir("body-tracker", "body_tracking.py")
-        p1 = subprocess.Popen(["python",tracker_dir])
+        p1 = subprocess.Popen(["python", tracker_dir, DETECTED_POSE_MEMORY_NAME])
         processes.append(p1)
 
         # Launch pose classifier
@@ -66,8 +66,8 @@ def launch():
 
         # Launch action detector
         print("Launching action detector...")
-        detector_dir = assemble_dir("launch", "detect_human_action.py")
-        p3 = subprocess.Popen(["python", detector_dir])
+        detector_dir = assemble_dir("pose-classifier", "detect_human_action.py")
+        p3 = subprocess.Popen(["python", detector_dir, DETECTED_POSE_MEMORY_NAME])
         processes.append(p3)
 
         print("All processes started. Press Ctrl+C to quit.")

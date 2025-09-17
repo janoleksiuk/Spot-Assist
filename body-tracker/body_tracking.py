@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from multiprocessing import shared_memory
-import time
+import sys
 import signal
 
 BODY_IDX = 34
@@ -13,7 +13,6 @@ FREQ = 2 # fps = 30/FREQ
 
 # shared memory segments
 PNN_INPUT_MEMORY_NAME = "pnn_input"
-DETECTED_POSE_MEMORY_NAME = "detected_pose_code_shm"
 
 
 #filtering - simple moving mean
@@ -116,11 +115,11 @@ def save_session(keypoints_blocks, header, postprocess=False):
     session_df.to_csv(f"session_{datetime.now().date()}.csv" , index= False)
 
 
-def main():
+def main(argv):
     # Create communication variables
-    detected_pose_code_shm = shared_memory.SharedMemory(name=DETECTED_POSE_MEMORY_NAME) # init it first !!!
+    shm_detected_pose_name = argv[1]
+    shm_detected_pose = shared_memory.SharedMemory(name=shm_detected_pose_name) # init it first !!!
     received_data_shape = (1,)
-    array_dtype = np.int64
 
     #handling termination from parent process
     def cleanup(signum=None, frame=None):
@@ -146,7 +145,7 @@ def main():
     err = zed.open(init_params)
     if err != sl.ERROR_CODE.SUCCESS:
         print("[Body tracker module]: Camera Open : "+repr(err)+". Exit program.")
-        detected_pose_code_shm.close()
+        shm_detected_pose.close()
         exit()
 
     body_params = sl.BodyTrackingParameters()
@@ -170,7 +169,7 @@ def main():
     if err != sl.ERROR_CODE.SUCCESS:
         print("[Body tracker module]: Enable Body Tracking : "+repr(err)+". Exit program.")
         zed.close()
-        detected_pose_code_shm.close()
+        shm_detected_pose.close()
         exit()
     
     # Setup for visualization
@@ -270,7 +269,7 @@ def main():
                 pose_value_arr = "Undetected"
 
                 try:
-                    pose_value_arr = np.ndarray(received_data_shape, dtype=array_dtype, buffer=detected_pose_code_shm.buf)
+                    pose_value_arr = np.ndarray(received_data_shape, dtype=np.int64, buffer=shm_detected_pose.buf)
                     pose_string = poses_dict[str(pose_value_arr)]
 
                 except Exception as e:
@@ -293,7 +292,7 @@ def main():
                 # Handle keyboard input
                 key = cv2.waitKey(10)
                 if key == 27:  # ESC key
-                    detected_pose_code_shm.close()
+                    shm_detected_pose.close()
                     save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
                     break
             i += 1
@@ -304,8 +303,11 @@ def main():
         cv2.destroyAllWindows()
     
     except KeyboardInterrupt:
-        detected_pose_code_shm.close()
+        shm_detected_pose.close()
         save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    try:
+        main(sys.argv)
+    except Exception as e:
+        print(f"[Body tracking module]: Error {e}. Error exit.")

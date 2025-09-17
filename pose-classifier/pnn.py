@@ -83,9 +83,9 @@ def colaplas(centre, x, sigma):
 def cosdistance(centre, x, sigma):
 	centre = centre.reshape(1, -1)
 
-	num = np.dot([centre], np.array(x).T)  # 向量点乘
+	num = np.dot([centre], np.array(x).T)  
 
-	denom = np.linalg.norm(centre) * np.linalg.norm(x, axis=1)  # 求模长的乘积
+	denom = np.linalg.norm(centre) * np.linalg.norm(x, axis=1)  
 	res = num / denom
 	# for i in res[0][0]:
 	# 	if i <0:
@@ -244,12 +244,12 @@ def print_metrics(y_test, predictions):
 	
 def main(argv):
 	# mapping onto memory segment detected pose code value holder
-	shm_detected_posed_code = argv[1]
-	shm = shared_memory.SharedMemory(name=shm_detected_posed_code)
+	shm_detected_pose_name = argv[1]
+	shm_detected_pose = shared_memory.SharedMemory(name=shm_detected_pose_name)
 
 	def cleanup(signum=None, frame=None):
 		print("[Classifier Module]: cleaning up shared memory...")
-		shm.close()
+		shm_detected_pose.close()
 		exit(0)
 
 	signal.signal(signal.SIGTERM, cleanup)
@@ -261,7 +261,7 @@ def main(argv):
 	
 	# prediction loop
 	while True:
-		data2, read_data_single_exit_code = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\19.csv', isTrain = False)
+		data2, read_data_single_exit_code = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot ecosystem v02\SpotAssist\prod\19.csv', isTrain = False)
 
 		if read_data_single_exit_code == 1:
 
@@ -275,7 +275,8 @@ def main(argv):
 
 			#handling predictions
 			# value = handle_prediction(predictions=predictions, endpoint_path=r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt')
-			value = handle_prediction(predictions=predictions, shm=shm)
+			value = handle_prediction(predictions=predictions, shm=shm_detected_pose)
+			print(value)
 		
 		else:
 			print("Corrupted data - prediciton skipped")
