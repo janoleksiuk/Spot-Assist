@@ -15,7 +15,7 @@ from bosdyn.client.image import ImageClient
 from bosdyn.client.robot_command import RobotCommandBuilder, RobotCommandClient, blocking_stand
 from bosdyn.client.robot_state import RobotStateClient
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
-from bosdyn.api import geometry_pb2, manipulation_api_pb2, arm_command_pb2, robot_command_pb2, synchronized_command_pb2
+from bosdyn.api import geometry_pb2, manipulation_api_pb2
 from bosdyn.client import frame_helpers
 
 from utils.spot_behaviours import start_rotating, stop_moving, relative_move, raise_arm, move_forward
@@ -31,8 +31,8 @@ FIRST_TARGET = 'bottle'
 SECOND_TARGET = 'person'
 GRAB_OBJECT = 'bottle'
 
-# approaching desired object
-def approach_object(robot_command_client, img_client, robot_state_client, object_name, model, dist=0, approach=0):
+
+def approach_object(robot_command_client, img_client, robot_state_client, object_name, model, dist=0):
     object_found = False
     stop_rotation_thread = threading.Event()
     
@@ -42,16 +42,11 @@ def approach_object(robot_command_client, img_client, robot_state_client, object
             start_rotating(robot_cmd_client, rot_vel, duration)
             time.sleep(duration)
 
-    if approach == 1:
-        rotation_thread = threading.Thread(target=rotation_thread_target, args=(robot_command_client, -ROT_VEL, 0.5))
-        source_name = 'frontright_fisheye_image'
-    else:
-        rotation_thread = threading.Thread(target=rotation_thread_target, args=(robot_command_client, ROT_VEL, 0.5))
-        source_name = 'frontleft_fisheye_image'
+    rotation_thread = threading.Thread(target=rotation_thread_target, args=(robot_command_client, -ROT_VEL, 0.5))
     rotation_thread.start()
     
     while True:
-        detections, frame = detect_objects(img_client, model, source_name=source_name)
+        detections, frame = detect_objects(img_client, model, source_name='frontright_fisheye_image')
 
         for det in detections:
             if det['label'] == object_name:
@@ -61,9 +56,9 @@ def approach_object(robot_command_client, img_client, robot_state_client, object
                 offset_px = np.abs(object_center - frame_center)
                 print(offset_px)
                 
-                # 15 - precise depth measurement - needs correction / 200 - forward trajectory
-                if offset_px < 140:
-
+                # 15 - precise depth measurement, but unstable
+                px_thr = 100
+                if offset_px < px_thr:
                     object_found = True
             
         if object_found:
@@ -74,36 +69,23 @@ def approach_object(robot_command_client, img_client, robot_state_client, object
     time.sleep(0.5)
     rotation_thread.join()
 
-    distance = dist
-    # approaching object - below lines used not in demo due to precision issues
-    # distance = compute_depth_to_object(img_client, [x1, x2, y1, y2], source_name='frontleft_depth_in_visual_frame')*0.67
-    # print(f"DIST: {dist}")
-
-    # correcting position - had to reach 15 px to measure distance - straight trajecotry is around 200 px
-    # start_rotating(robot_command_client, -ROT_VEL, duration_sec=3)
-    # time.sleep(3)
-
+    distance = compute_depth_to_object(img_client, [x1, x2, y1, y2], source_name='frontleft_depth_in_visual_frame')*0.75
     try:
         exit_flag = relative_move(distance , 0, 0, robot_command_client, robot_state_client, stairs=False)                   
     finally:
         robot_command_client.robot_command(RobotCommandBuilder.stop_command())
 
-    # exiting if relative_move malfunctions - returns False as approaching failed
     if not exit_flag:
-        print("Approaching to object failed")
+        print("[--- SPOT CONTROL ---]: Approaching to object failed")
         return False
     
-    print("Approaching succesful")
     return True
 
-# grabbing desired object
+
 def grab_object(robot_command_client, img_client, manipulation_client, object_name, model):
-    object_grabbed = False
     object_detected = False
-
     while not object_detected:
-        detections, frame = detect_objects(img_client, model)
-
+        detections, _ = detect_objects(img_client, model)
         if len(detections) > 0:
             for det in detections:
                 if det['label'] == object_name:
@@ -124,12 +106,10 @@ def grab_object(robot_command_client, img_client, manipulation_client, object_na
 
     grasp.grasp_params.grasp_palm_to_fingertip = 0.15
     grasp.grasp_params.grasp_params_frame_name = frame_helpers.VISION_FRAME_NAME
-
     request = manipulation_api_pb2.ManipulationApiRequest(
         pick_object_in_image=grasp
     )
 
-    print("Sending grasp request...")
     response = manipulation_client.manipulation_api_command(request)
     cmd_id = response.manipulation_cmd_id
     start_time = time.time()
@@ -140,49 +120,46 @@ def grab_object(robot_command_client, img_client, manipulation_client, object_na
         feedback = manipulation_client.manipulation_api_feedback_command(feedback_req)
 
         state = feedback.current_state
-        state_name = manipulation_api_pb2.ManipulationFeedbackState.Name(state)
-        print(f"Grasp status: {state_name} ({state})", end='\r')
-
         if state == manipulation_api_pb2.MANIP_STATE_GRASP_SUCCEEDED:
-            print("Successfully grasped the object")
             return True
         
         elif state in [
                 manipulation_api_pb2.MANIP_STATE_GRASP_FAILED,
                 manipulation_api_pb2.MANIP_STATE_GRASP_PLANNING_NO_SOLUTION,
                 manipulation_api_pb2.MANIP_STATE_GRASP_FAILED_TO_RAYCAST_INTO_MAP]:
-            print("WGrasp failed. The arm will retract.")
+            print("[--- SPOT CONTROL ---]: Grasp failed. The arm will retract.")
             robot_command_client.robot_command(RobotCommandBuilder.arm_stow_command())
             time.sleep(2)
             return False
 
         if time.time() - start_time > 15:
-            print("Grasp timed out. The arm will retract.")
-
+            print("[--- SPOT CONTROL ---]: Grasp timed out. The arm will retract.")
             try:
                 robot_command_client.robot_command(RobotCommandBuilder.arm_stow_command(), timeout_sec=3)
                 time.sleep(2.0)
                 print("Command sent: arm_stow_command()")
-            
             except Exception as e:
                 print(f"Arm retraction failed: {e}")
                 return False
 
         time.sleep(0.2)
 
-#function retrieving detected action code from endpoint
+
 def get_action(received_data_shape, shm_buffer):
     try:
         action_value_arr = np.ndarray(received_data_shape, dtype=np.int64, buffer=shm_buffer.buf)
         return action_value_arr[0]
     except Exception as e:
-        print(f"[SPOT CONTROL]: Error while getting pose value: {e}")
+        print(f"[--- SPOT CONTROL ---]: Error while getting pose value: {e}")
         return 0
 
+
 def main():
+    # mapping multiprocessing shared memory
     shm_detected_action = shared_memory.SharedMemory(name=DETECTED_ACTION_MEMORY_NAME) 
     shm_detected_action_received_data_shape = (1,)
 
+    # handling process termination 
     def cleanup(signum=None, frame=None):
         print("[SPOT CONTROL]: cleaning up shared memory...")
         shm_detected_action.close()
@@ -190,7 +167,7 @@ def main():
     signal.signal(signal.SIGTERM, cleanup)
     signal.signal(signal.SIGINT, cleanup)
 
-    bosdyn.client.util.setup_logging(config.verbose)
+    bosdyn.client.util.setup_logging(options.verbose)
     parser = argparse.ArgumentParser()
     bosdyn.client.util.add_base_arguments(parser)
     parser.add_argument('--camera-source', default='hand_color_image', help='Using camera source')
@@ -214,11 +191,10 @@ def main():
         print_battery_level(state)
 
         model = YOLO(MODEL_PATH)
-        print(f"Loading the YOLOv11 model : {MODEL_PATH}")
 
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
             robot.power_on(timeout_sec=20)
-            assert robot.is_powered_on(), "Failed to power on Spot"
+            assert robot.is_powered_on(), "[--- SPOT CONTROL ---]: Failed to power on Spot"
 
             # waiting for appropiate pose
             while True:
@@ -226,40 +202,41 @@ def main():
                 # code action 1 = sit -> stand -> sit
                     time.sleep(0.5)
                 else:
-                    DEMO_APPROACH = 0
+                    # initial stand-up
                     blocking_stand(robot_command_client, timeout_sec=10)
                     time.sleep(1)
 
-                    #approach grabbable object
-                    obj_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=FIRST_TARGET, model=model, dist=1, approach=DEMO_APPROACH)
+                    # find and approach bottle
+                    obj_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=FIRST_TARGET, model=model)
                     time.sleep(1)
-                    DEMO_APPROACH = 1
 
-                    # HERE GRAB OBJ
+                    # grab bottle
                     obj_grabbed = grab_object(robot_command_client, image_client, manipulation_client, object_name=GRAB_OBJECT, model=model)
                     time.sleep(1)
 
+                    # relocate arm
                     raise_arm(robot_command_client)
                     time.sleep(1)
 
-                    # # deliver object to person
-                    human_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=SECOND_TARGET, model=model, dist=1, approach=DEMO_APPROACH)
+                    # find and approach human
+                    human_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=SECOND_TARGET, model=model)
                     time.sleep(2)
+
+                    # release gripper
                     robot_command_client.robot_command(RobotCommandBuilder.claw_gripper_open_command())
                     time.sleep(1)
 
                     move_forward(robot_command_client, fwd_vel=-0.5, duration_sec=1)
-
                     task_completed = obj_approached and obj_grabbed and human_approached
                     break
 
     except Exception as e:
-        print(f"An exception occurred: {e}")
+        print(f"[--- SPOT CONTROL ---]: An exception occurred: {e}")
 
     finally:
         try:
             if not task_completed:
-                print("TASK NOT FULLY COMPLETED")
+                print("[--- SPOT CONTROL ---]: Task not accomplished.")
                 stop_moving(robot_command_client)
                 time.sleep(1)
                 robot_command_client.robot_command(RobotCommandBuilder.arm_stow_command())
@@ -268,7 +245,6 @@ def main():
                 time.sleep(1)
                 robot.power_off(cut_immediately=False, timeout_sec=20)
             else:
-               print("TASK COMPLETED")
                stop_moving(robot_command_client)
                time.sleep(1)
                robot_command_client.robot_command(RobotCommandBuilder.synchro_sit_command())
@@ -276,11 +252,11 @@ def main():
                robot.power_off(cut_immediately=False, timeout_sec=20)
 
         except Exception as e:
-            print(f"Shutdown failed: {e}")
+            print(f"[--- SPOT CONTROL ---]: Shutdown failed: {e}")
 
         cv2.destroyAllWindows()
         shm_detected_action.close()
-        print("Spot operation completed. Exiting.")
+        
 
 if __name__ == '__main__':
     if not main():
