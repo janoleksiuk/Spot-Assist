@@ -5,15 +5,19 @@ import pandas as pd
 # 0 - error occured during reading csv
 # 1 - successful data acquirenment from csv
 
-def input(trainpath, isTrain = True):
+def input(input, isTrain = True, isCSV = False):
 	d = {'sitting': 0, 'standing': 1, 'sitting_1hand': 2, 'standing_1hand': 3}
 
 	osize=57
 
-	try:
-		file_out_t = pd.read_csv(trainpath)
-	except pd.errors.EmptyDataError:
-		return pd.DataFrame(), 0
+	if isCSV:
+		try:
+			file_out_t = pd.read_csv(input)
+		except pd.errors.EmptyDataError:
+			return pd.DataFrame(), 0
+	else:
+		file_out_t = pd.DataFrame(input)
+		file_out_t["label"] = "standing"
 
 	sizetrain = file_out_t.iloc[0:, 0:osize].values.shape[0]
 	x_train = file_out_t.iloc[0:sizetrain, 0:osize].values

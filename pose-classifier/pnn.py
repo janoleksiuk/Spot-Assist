@@ -259,11 +259,16 @@ def main(argv):
 
 	#import model
 	model_dir = assemble_dir("pose-classifier", "reference_data", "reference_data.csv")
-	data1, _ = read_data.input(trainpath=model_dir, isTrain=True)
+	data1, _ = read_data.input(trainpath=model_dir, isTrain=True, isCSV=True)
 	
 	# prediction loop
 	while True:
-		data2, read_data_single_exit_code = read_data.input(trainpath = r'C:\Users\j.oleksiuk_ladm\Desktop\Spot ecosystem v02\SpotAssist\prod\19.csv', isTrain = False)
+		pnn_input = np.ndarray((15, 57), dtype=np.float64, buffer=shm_pnn_input.buf)
+		try:
+			data2, read_data_single_exit_code = read_data.input(pnn_input, isTrain=False)
+		except Exception as e:
+			print(f"[Classifier module]: Error {e}. Incorrect pnn memory sharing input.")
+			continue
 
 		if read_data_single_exit_code == 1:
 
@@ -276,7 +281,6 @@ def main(argv):
 			predictions=PNN(data, 0.01867524 , 3)
 
 			#handling predictions
-			# value = handle_prediction(predictions=predictions, endpoint_path=r'C:\Users\j.oleksiuk_ladm\Desktop\Spot Ecosystem\prod\behaviour_code.txt')
 			value = handle_prediction(predictions=predictions, shm=shm_detected_pose)
 			print(value)
 		
