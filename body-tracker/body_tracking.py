@@ -9,6 +9,7 @@ import signal
 
 BODY_IDX = 34
 CONFIDENCE_THR = 40 # confidence of body_point detection
+SAVE_SESSION_DATA = False
 POSES_DICT = {"[0]" : "sitting", 
                 "[1]": "standing", 
                 "[2]" : "sitting_1hand", 
@@ -103,7 +104,8 @@ def main(argv):
 
     def cleanup(signum=None, frame=None):
         print("[Body tracker module]: cleaning up shared memory...")
-        save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
+        if SAVE_SESSION_DATA:
+            save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
         shm_detected_pose.close()
         shm_pnn_input.close()
         exit(0)
@@ -243,7 +245,8 @@ def main(argv):
                 key = cv2.waitKey(10)
                 if key == 27:  # ESC key
                     shm_detected_pose.close()
-                    save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
+                    if SAVE_SESSION_DATA:
+                        save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
                     break
             i += 1
 
@@ -254,7 +257,8 @@ def main(argv):
     except KeyboardInterrupt:
         shm_detected_pose.close()
         shm_pnn_input.close()
-        save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
+        if SAVE_SESSION_DATA:
+            save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
 
 if __name__ == '__main__':
     try:
