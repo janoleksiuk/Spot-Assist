@@ -7,20 +7,17 @@ from multiprocessing import shared_memory
 import sys
 import signal
 
-#TO DO - optional saving
-
 BODY_IDX = 34
 CONFIDENCE_THR = 40 # confidence of body_point detection
+POSES_DICT = {"[0]" : "sitting", 
+                "[1]": "standing", 
+                "[2]" : "sitting_1hand", 
+                "[3]": "standing_1hand"}
 
-#filtering - simple moving mean
+
 def apply_moving_mean(df, window_size):
-    # Create a copy of the original DataFrame to avoid modifying it
     result_df = df.copy()
-    
-    # Get all column names except the last one
     columns_to_transform = df.columns[:-1]
-    
-    # Apply moving mean to each column except the last one
     for column in columns_to_transform:
         result_df[column] = df[column].rolling(window=window_size, min_periods=1).mean()
     
@@ -29,21 +26,15 @@ def apply_moving_mean(df, window_size):
 
 #preprocessing - rearagning acquired input from 34 raw 3d keypoints data to 19 filtered 3d keypoints data with default label
 def process_df(df):
-
     #rotating by 180 degree (since the input is inversed)
     df = df * (-1)
-    
+
     # Delete columns related to specific keypoints
     keypoints_to_remove = [7, 9, 10, 14, 16, 17, 21, 25, 27, 28, 29, 30, 31, 32, 33]
     cols_to_drop = []
-    
     for kp in keypoints_to_remove:
         cols_to_drop.extend([f'x{kp}', f'y{kp}', f'z{kp}'])
-    
-    # Remove any columns that don't actually exist in the DataFrame
     cols_to_drop = [col for col in cols_to_drop if col in df.columns]
-    
-    # Drop the columns
     df = df.drop(columns=cols_to_drop)
     
     # Find remaining keypoint indices
@@ -59,15 +50,10 @@ def process_df(df):
     
     # Transform coordinates to make keypoint1 the origin (0,0,0)
     if 1 in remaining_indices:
-        
-        # Process each row to transform coordinates
         for i, row in df.iterrows():
-            # Get the coordinates of keypoint1
             x1 = row['x1']
             y1 = row['y1']
             z1 = row['z1']
-            
-            # Subtract keypoint1 coordinates from all keypoints
             for idx in remaining_indices:
                 df.at[i, f'x{idx}'] = row[f'x{idx}'] - x1
                 df.at[i, f'y{idx}'] = row[f'y{idx}'] - y1
@@ -75,8 +61,6 @@ def process_df(df):
         
     # Create mapping from old indices to new sequential indices
     old_to_new = {old: new for new, old in enumerate(sorted(remaining_indices))}
-    
-    # Create a dictionary to store column renames
     rename_dict = {}
     for col in df.columns:
         if col.startswith(('x', 'y', 'z')):
@@ -88,8 +72,6 @@ def process_df(df):
                     rename_dict[col] = f'{prefix}{new_idx}'
             except ValueError:
                 pass
-    
-    # Rename the columns
     df = df.rename(columns=rename_dict)
     
     # Add a 'label' column with default value 'standing' to match pnn.py syntax 
@@ -103,7 +85,6 @@ def process_df(df):
 
 #postprocessing - outputing session completed csv
 def save_session(keypoints_blocks, header, postprocess=False):
-    # Save keypoint data blocks to output CSV
     print("[Body tracker module]: Saving session data to csv")
     session_3d_matrix = np.vstack(keypoints_blocks)
     session_df = pd.DataFrame(session_3d_matrix, columns = header)
@@ -113,127 +94,95 @@ def save_session(keypoints_blocks, header, postprocess=False):
 
 
 def main(argv):
-    # Create communication variables
     shm_detected_pose_name = argv[1]
-    shm_detected_pose = shared_memory.SharedMemory(name=shm_detected_pose_name) # init it first !!!
+    shm_detected_pose = shared_memory.SharedMemory(name=shm_detected_pose_name) 
     received_data_shape = (1,)
     shm_pnn_input_name = argv[2]
-    shm_pnn_input = shared_memory.SharedMemory(name=shm_pnn_input_name, size=(np.random.rand(15, 57).astype(np.float64)).nbytes)
+    shm_pnn_input = shared_memory.SharedMemory(name=shm_pnn_input_name, 
+                                               size=(np.random.rand(15, 57).astype(np.float64)).nbytes)
 
-    #handling termination from parent process
     def cleanup(signum=None, frame=None):
         print("[Body tracker module]: cleaning up shared memory...")
         save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
-        #smh.close()
+        shm_detected_pose.close()
+        shm_pnn_input.close()
         exit(0)
-
     signal.signal(signal.SIGTERM, cleanup)
     signal.signal(signal.SIGINT, cleanup)
     
-    # Create a Camera object
-    zed = sl.Camera()
-
-    # Create a InitParameters object and set configuration parameters
     init_params = sl.InitParameters()
-    init_params.camera_resolution = sl.RESOLUTION.HD720  # Use HD720 video mode
+    init_params.camera_resolution = sl.RESOLUTION.HD720  
     init_params.depth_mode = sl.DEPTH_MODE.NEURAL
     init_params.coordinate_units = sl.UNIT.METER
     init_params.sdk_verbose = 1
 
-    # Open the camera
+    zed = sl.Camera()
     err = zed.open(init_params)
     if err != sl.ERROR_CODE.SUCCESS:
-        print("[Body tracker module]: Camera Open : "+repr(err)+". Exit program.")
+        print("[--- BODY TRACKER ---]: Camera open error: " + repr(err) + ". Exit program.")
         shm_detected_pose.close()
         shm_pnn_input.close()
         exit()
 
     body_params = sl.BodyTrackingParameters()
-    # Different model can be chosen, optimizing the runtime or the accuracy
     body_params.detection_model = sl.BODY_TRACKING_MODEL.HUMAN_BODY_FAST
     body_params.enable_tracking = True
     body_params.enable_segmentation = False
-    # Optimize the person joints position, requires more computations
     body_params.enable_body_fitting = True
     body_params.body_format = sl.BODY_FORMAT.BODY_34
-
     if body_params.enable_tracking:
         positional_tracking_param = sl.PositionalTrackingParameters()
-        # positional_tracking_param.set_as_static = True
         positional_tracking_param.set_floor_as_origin = True
         zed.enable_positional_tracking(positional_tracking_param)
 
-    print("[Body tracker module]: Body tracking: Loading Module...")
-
     err = zed.enable_body_tracking(body_params)
     if err != sl.ERROR_CODE.SUCCESS:
-        print("[Body tracker module]: Enable Body Tracking : "+repr(err)+". Exit program.")
+        print("[--- BODY TRACKER ---]: Enable Body Tracking : "+repr(err)+". Exit program.")
         zed.close()
         shm_detected_pose.close()
         shm_pnn_input.close()
         exit()
     
-    # Setup for visualization
     camera_info = zed.get_camera_information()
-    # Get camera resolution
     image_width = camera_info.camera_configuration.resolution.width
     image_height = camera_info.camera_configuration.resolution.height
-    # Create OpenCV named window
     cv2.namedWindow("ZED Body Tracking", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("ZED Body Tracking", image_width, image_height)
     
-    # Create image objects
     image = sl.Mat()
-    
-    # Body tracking objects
     bodies = sl.Bodies()
     body_runtime_param = sl.BodyTrackingRuntimeParameters()
     body_runtime_param.detection_confidence_threshold = CONFIDENCE_THR
     
-    #csv variables
+    """
+    CSV variables - initially the communication was based on csv file exchange
+    currently it is based on sharing numpy arrays, but the processing pipeline
+    here remained to be adjusted to csv exchange - to be changed in future.
+    """
     header = []
     for l in range(34):
         header.extend([f'x{l}', f'y{l}', f'z{l}'])
+    poses_dict = POSES_DICT
     
-    poses_dict = {"[0]" : "sitting", "[1]": "standing", "[2]" : "sitting_1hand", "[3]": "standing_1hand"}
-    
-    #initializing variables
     i = 0 
     body_detected_idx = 0
     keypoint_3d_row = np.ones((BODY_IDX*3), dtype=float)
     keypoint_3d_blocks = []
 
-    #create frame
-    # Create the window with a name
     cv2.namedWindow("ZED Body Tracking", cv2.WINDOW_NORMAL)
-
-    # Set fixed size: width=300, height=400
     cv2.resizeWindow("ZED Body Tracking", 900, 600)
-
-    # Move window to top-left corner of screen (x=0, y=0)
     cv2.moveWindow("ZED Body Tracking", 0, 0)
 
-    #body tracking
     try:
         while True:
             if zed.grab() == sl.ERROR_CODE.SUCCESS:
-                # Retrieve the left image
                 zed.retrieve_image(image, sl.VIEW.LEFT)
-                
-                # Retrieve bodies
                 err = zed.retrieve_bodies(bodies, body_runtime_param)
-                
-                # Convert sl.Mat to OpenCV Mat
                 img_cv = image.get_data()
-                
-                # Draw skeleton for each detected person
+
                 if bodies.is_new and bodies.body_list:
-                    # print(f"{len(bodies.body_list)} Person(s) detected")
-                    
-                    # Iterate through all detected bodies
                     for idx, body in enumerate(bodies.body_list):
-                        
-                        # Get 3D keypoints and transform the to (102,1) form
+                        # Get 3D keypoints and transform the to (15, 57) form
                         keypoint_3d = np.array([body.keypoint])
                         for j in range (0, BODY_IDX):
                             keypoint_3d_row[3*j:3*j + 3] = keypoint_3d[0][j]
@@ -247,44 +196,39 @@ def main(argv):
                             body_detected_idx +=1
                         
                 # create dataframe every 15 frames - to be used by predictor:
-                if body_detected_idx == 15:
-
-                    #arrange 102x15 matrix from 15x1020 array  
+                if body_detected_idx == 15: 
                     keypoint_3d_matrix = np.zeros((body_detected_idx,102), dtype = float)
                     for k in range (0, body_detected_idx):
                         keypoint_3d_matrix[k] = keypoint_3d_array[k*102:k*102+102]
-                    
+
+                    # saving to general session dataframe
                     keypoint_3d_blocks.append(keypoint_3d_matrix)
                     df = pd.DataFrame(keypoint_3d_matrix, columns = header)
 
-                    # preprocess data
                     df = process_df(df=df)
 
-                    # writing to buffer
+                    # writing to shm multiprocessing buffers
                     try:    
                         pnn_input_arr = df.to_numpy(dtype=np.float64)
                         shm_array = np.ndarray(pnn_input_arr.shape, dtype=pnn_input_arr.dtype, buffer=shm_pnn_input.buf)
                         shm_array[:] = pnn_input_arr[:]             
                     except Exception as e:
-                        print(f"[Body tracking module]: Error {e} while writing pnn input array.")
-
-                    #reset variables
+                        print(f"[--- BODY TRACKER ---]: Error {e} while writing pnn input array.")
+                    
                     body_detected_idx = 0      
 
                 # Draw informative text on img
                 pose_value_arr = "Undetected"
-
                 try:
                     pose_value_arr = np.ndarray(received_data_shape, dtype=np.int64, buffer=shm_detected_pose.buf)
                     pose_string = poses_dict[str(pose_value_arr)]
-
                 except Exception as e:
-                    print(f"[Body tracker module]: Error while putting pose tring on img: {e}")
+                    print(f"[--- BODY TRACKER ---]: Error while putting pose string on img: {e}")
 
                 cv2.putText(
                     img_cv,                     # Image to draw on
-                    pose_string,                 # Text
-                    (10, 300),                   # Position (x=10, y=30)
+                    pose_string,                # Text
+                    (10, 300),                  # Position (x=10, y=30)
                     cv2.FONT_HERSHEY_SIMPLEX,   # Font
                     5,                          # Font scale
                     (0, 0, 255),                # Color (Green in BGR)
@@ -303,7 +247,6 @@ def main(argv):
                     break
             i += 1
 
-        # Close the camera and destroy windows
         zed.disable_body_tracking()
         zed.close()
         cv2.destroyAllWindows()
@@ -317,4 +260,4 @@ if __name__ == '__main__':
     try:
         main(sys.argv)
     except Exception as e:
-        print(f"[Body tracking module]: Error {e}. Error exit.")
+        print(f"[--- BODY TRACKER ---]: Error {e}. Error exit.")

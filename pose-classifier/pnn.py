@@ -252,14 +252,14 @@ def main(argv):
 	def cleanup(signum=None, frame=None):
 		print("[Classifier Module]: cleaning up shared memory...")
 		shm_detected_pose.close()
-		shm_pnn_input_name.close()
+		shm_pnn_input.close()
 		exit(0)
 	signal.signal(signal.SIGTERM, cleanup)
 	signal.signal(signal.SIGINT, cleanup)
 
 	#import model
 	model_dir = assemble_dir("pose-classifier", "reference_data", "reference_data.csv")
-	data1, _ = read_data.input(trainpath=model_dir, isTrain=True, isCSV=True)
+	data1, _ = read_data.input(model_dir, isTrain=True, isCSV=True)
 	
 	# prediction loop
 	while True:
@@ -278,7 +278,7 @@ def main(argv):
 			data = {k: combined[k] for k in ordered_keys}
 			
 			#predicitng
-			predictions=PNN(data, 0.01867524 , 3)
+			predictions=PNN(data, 0.01867524, 3)
 
 			#handling predictions
 			value = handle_prediction(predictions=predictions, shm=shm_detected_pose)
