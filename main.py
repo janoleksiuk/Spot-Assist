@@ -1,8 +1,9 @@
 from launch.launch_detector import launch
-import subprocess
+
 
 def main():
     launch()
+
 
 if __name__ == "__main__":
     try:

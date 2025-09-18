@@ -1,29 +1,12 @@
-import argparse
-import sys
-import time
-import signal
 import io
-
-import bosdyn.client
-import bosdyn.client.util
-from bosdyn.client.lease import LeaseClient, LeaseKeepAlive
-from bosdyn.client.image import ImageClient
-from bosdyn.client.robot_command import RobotCommandBuilder, RobotCommandClient, blocking_stand
-from bosdyn.client.robot_state import RobotStateClient
-from bosdyn.client.manipulation_api_client import ManipulationApiClient
-from bosdyn.api import geometry_pb2, manipulation_api_pb2, arm_command_pb2, robot_command_pb2, synchronized_command_pb2
-from bosdyn.client import frame_helpers
-
 import cv2
 import numpy as np
 from PIL import Image, UnidentifiedImageError
-from ultralytics import YOLO
-
 from datetime import datetime
+
 
 # detecting objects using YOLO model
 def detect_objects(image_client, model, confidence=0.4, source_name='hand_color_image', save=True):
-
     # retrieving image from spot camera (source name)
     response = image_client.get_image_from_sources([source_name])[0]
     img_data = response.shot.image.data
@@ -49,8 +32,9 @@ def detect_objects(image_client, model, confidence=0.4, source_name='hand_color_
             
     if save:
         save_photo(frame=frame, source=source_name)
-            
+
     return detections, frame
+
 
 # computing distance from spot to object based on depth of the captured image
 def compute_depth_to_object(image_client, bbox, source_name='hand_depth_in_hand_color_frame'):
@@ -91,19 +75,17 @@ def compute_depth_to_object(image_client, bbox, source_name='hand_depth_in_hand_
             #print("No valid neighborhood depth data.")
             err_cnt += 1
             if err_cnt > 50:
-                print("Error: Invalid point cloud from depth source")
+                print("[--- OBJ DETECTION ---]: Error: Invalid point cloud from depth source.")
                 return 0.0
             continue
 
         depth_mm = int(np.median(valid_neighbors))
-        depth_meters = depth_mm / 1000.0
         output_depth += (depth_mm / 1000.0)
         corr_cnt += 1
-        #print(f"Distance: {depth_meters:.2f} meters")
-        
+
         if corr_cnt == int(25):
             return output_depth/25.0
-        
-# save photo
+
+
 def save_photo(frame, source : str):
     cv2.imwrite(source + datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".jpg", frame)
