@@ -11,8 +11,8 @@ from launch.memory_management import memory_init, DETECTED_POSE_MEMORY_NAME, \
 def assemble_dir(*parts: str) -> str:
     project_root = Path(__file__).resolve().parent.parent  # Go up from launch/
     full_path = project_root.joinpath(*parts)
-    print(full_path)
     return str(full_path)
+
 
 def launch():
     # Init memory segments for communication
@@ -20,73 +20,58 @@ def launch():
     shms = memory_init()
     processes = []
 
-    # signal handler function
+    # process termination handler
     def signal_handler(sig, frame):
-        """Handle interrupt signals by terminating child processes"""
-        print("\nShutting down processes...")
+        print("[--- LAUNCHER ---]: Shutting down processes.")
         for process in processes:
-            if process.poll() is None:  # Check if process is still running
-                print(f"Terminating process with PID: {process.pid}")
+            if process.poll() is None:  
+                print(f"[--- LAUNCHER ---]: Terminating process with PID: {process.pid}")
                 process.terminate()
-                # Give it a moment to terminate gracefully
                 try:
                     process.wait(timeout=3)
                 except subprocess.TimeoutExpired:
-                    print(f"Process {process.pid} did not terminate gracefully, killing...")
+                    print(f"[--- LAUNCHER ---]: Process {process.pid} did not terminate gracefully, killing...")
                     process.kill()
-            
-        # handle connections
         try:
             for shm in shms:
-                print(f"[Launcher]: Cleaning up memeory segment {shm}")
+                print(f"[--- LAUNCHER ---]: Cleaning up memeory segment {shm}")
                 shm.close()
                 shm.unlink()
-
         except Exception as e:
-            print(f"Error: {e}. Did not correclty unlinked shared memory. Possible memory leakage")
+            print(f"[--- LAUNCHER ---]: Error: {e}. Did not correclty unlinked shared memory. Possible memory leakage")
         
-        print("All processes terminated")
+        print("[--- LAUNCHER ---]: All processes terminated")
         sys.exit(0)
-
-    # Register signal handlers
     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
 
     try:
-        # Launch camera
-        print("Launching body tracking...")
+        print("[--- LAUNCHER ---]: Launching BODY TRACKING module.")
         tracker_dir = assemble_dir("body-tracker", "body_tracking.py")
         p1 = subprocess.Popen(["python", tracker_dir, DETECTED_POSE_MEMORY_NAME,
                                                       PNN_INPUT_MEMORY_NAME])
         processes.append(p1)
 
         # Launch pose classifier
-        print("Launching predictor...")
+        print("[--- LAUNCHER ---]: Launching CLASSIFIER module.")
         classifier_dir = assemble_dir("pose-classifier", "pnn.py")
         p2 = subprocess.Popen(["python", classifier_dir, DETECTED_POSE_MEMORY_NAME,
                                                          PNN_INPUT_MEMORY_NAME])
         processes.append(p2)
 
         # Launch action detector
-        print("Launching action detector...")
+        print("[--- LAUNCHER ---]: Launching ACTION DETECTOR module.")
         detector_dir = assemble_dir("pose-classifier", "detect_human_action.py")
         p3 = subprocess.Popen(["python", detector_dir, DETECTED_POSE_MEMORY_NAME, 
                                                        DETECTED_ACTION_MEMORY_NAME])
         processes.append(p3)
 
-        print("All processes started. Press Ctrl+C to quit.")
-        
-        # Wait for processes to complete
+        print("[--- LAUNCHER ---]: All processes started. Press Ctrl+C to quit.")
         p1.wait()
         p2.wait()
         p3.wait()
 
-    except KeyboardInterrupt:
-        # This will be caught by the signal handler
-        pass
     except Exception as e:
-        print(f"Error occurred: {e}")
-        # Clean up processes on error
+        print(f"[--- LAUNCHER ---]: Error occurred: {e}")
         signal_handler(None, None)
 
-    print("Exiting main program")

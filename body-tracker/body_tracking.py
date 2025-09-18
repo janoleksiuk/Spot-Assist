@@ -77,7 +77,6 @@ def process_df(df):
     
     # Add a 'label' column with default value 'standing' to match pnn.py syntax 
     df['label'] = 'standing'
-
     #filtering
     df = apply_moving_mean(df, 5)
     
@@ -86,7 +85,7 @@ def process_df(df):
 
 #postprocessing - outputing session completed csv
 def save_session(keypoints_blocks, header, postprocess=False):
-    print("[Body tracker module]: Saving session data to csv")
+    print("[--- BODY TRACKER ---]: Saving session data to csv")
     session_3d_matrix = np.vstack(keypoints_blocks)
     session_df = pd.DataFrame(session_3d_matrix, columns = header)
     if postprocess:
@@ -102,8 +101,9 @@ def main(argv):
     shm_pnn_input = shared_memory.SharedMemory(name=shm_pnn_input_name, 
                                                size=(np.random.rand(15, 57).astype(np.float64)).nbytes)
 
+    # process termination handler
     def cleanup(signum=None, frame=None):
-        print("[Body tracker module]: cleaning up shared memory...")
+        print("[--- BODY TRACKER ---]: cleaning up shared memory...")
         if SAVE_SESSION_DATA:
             save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
         shm_detected_pose.close()
@@ -175,90 +175,84 @@ def main(argv):
     cv2.resizeWindow("ZED Body Tracking", 900, 600)
     cv2.moveWindow("ZED Body Tracking", 0, 0)
 
-    try:
-        while True:
-            if zed.grab() == sl.ERROR_CODE.SUCCESS:
-                zed.retrieve_image(image, sl.VIEW.LEFT)
-                err = zed.retrieve_bodies(bodies, body_runtime_param)
-                img_cv = image.get_data()
+    while True:
+        if zed.grab() == sl.ERROR_CODE.SUCCESS:
+            zed.retrieve_image(image, sl.VIEW.LEFT)
+            err = zed.retrieve_bodies(bodies, body_runtime_param)
+            img_cv = image.get_data()
 
-                if bodies.is_new and bodies.body_list:
-                    for idx, body in enumerate(bodies.body_list):
-                        # Get 3D keypoints and transform the to (15, 57) form
-                        keypoint_3d = np.array([body.keypoint])
-                        for j in range (0, BODY_IDX):
-                            keypoint_3d_row[3*j:3*j + 3] = keypoint_3d[0][j]
+            if bodies.is_new and bodies.body_list:
+                for idx, body in enumerate(bodies.body_list):
+                    # Get 3D keypoints and transform the to (15, 57) form
+                    keypoint_3d = np.array([body.keypoint])
+                    for j in range (0, BODY_IDX):
+                        keypoint_3d_row[3*j:3*j + 3] = keypoint_3d[0][j]
 
-                        # append to output 3D keypoints matrix
-                        if body_detected_idx == 0:
-                            keypoint_3d_array = keypoint_3d_row
-                            body_detected_idx += 1
-                        else:
-                            keypoint_3d_array = np.append(keypoint_3d_array, keypoint_3d_row, axis=0)
-                            body_detected_idx +=1
-                        
-                # create dataframe every 15 frames - to be used by predictor:
-                if body_detected_idx == 15: 
-                    keypoint_3d_matrix = np.zeros((body_detected_idx,102), dtype = float)
-                    for k in range (0, body_detected_idx):
-                        keypoint_3d_matrix[k] = keypoint_3d_array[k*102:k*102+102]
-
-                    # saving to general session dataframe
-                    keypoint_3d_blocks.append(keypoint_3d_matrix)
-                    df = pd.DataFrame(keypoint_3d_matrix, columns = header)
-
-                    df = process_df(df=df)
-
-                    # writing to shm multiprocessing buffers
-                    try:    
-                        pnn_input_arr = df.to_numpy(dtype=np.float64)
-                        shm_array = np.ndarray(pnn_input_arr.shape, dtype=pnn_input_arr.dtype, buffer=shm_pnn_input.buf)
-                        shm_array[:] = pnn_input_arr[:]             
-                    except Exception as e:
-                        print(f"[--- BODY TRACKER ---]: Error {e} while writing pnn input array.")
+                    # append to output 3D keypoints matrix
+                    if body_detected_idx == 0:
+                        keypoint_3d_array = keypoint_3d_row
+                        body_detected_idx += 1
+                    else:
+                        keypoint_3d_array = np.append(keypoint_3d_array, keypoint_3d_row, axis=0)
+                        body_detected_idx +=1
                     
-                    body_detected_idx = 0      
+            # create dataframe every 15 frames - to be used by predictor:
+            if body_detected_idx == 15: 
+                keypoint_3d_matrix = np.zeros((body_detected_idx,102), dtype = float)
+                for k in range (0, body_detected_idx):
+                    keypoint_3d_matrix[k] = keypoint_3d_array[k*102:k*102+102]
 
-                # Draw informative text on img
-                pose_value_arr = "Undetected"
-                try:
-                    pose_value_arr = np.ndarray(received_data_shape, dtype=np.int64, buffer=shm_detected_pose.buf)
-                    pose_string = poses_dict[str(pose_value_arr)]
+                # saving to general session dataframe
+                keypoint_3d_blocks.append(keypoint_3d_matrix)
+                df = pd.DataFrame(keypoint_3d_matrix, columns = header)
+
+                df = process_df(df=df)
+
+                # writing to shm multiprocessing buffers
+                try:    
+                    pnn_input_arr = df.to_numpy(dtype=np.float64)
+                    shm_array = np.ndarray(pnn_input_arr.shape, dtype=pnn_input_arr.dtype, buffer=shm_pnn_input.buf)
+                    shm_array[:] = pnn_input_arr[:]             
                 except Exception as e:
-                    print(f"[--- BODY TRACKER ---]: Error while putting pose string on img: {e}")
-
-                cv2.putText(
-                    img_cv,                     # Image to draw on
-                    pose_string,                # Text
-                    (10, 300),                  # Position (x=10, y=30)
-                    cv2.FONT_HERSHEY_SIMPLEX,   # Font
-                    5,                          # Font scale
-                    (0, 0, 255),                # Color (Green in BGR)
-                    5,                          # Thickness
-                    cv2.LINE_AA                 # Line type for anti-aliasing
-                )    
-
-                # Display the image
-                cv2.imshow("ZED Body Tracking", img_cv)
+                    print(f"[--- BODY TRACKER ---]: Error {e} while writing pnn input array.")
                 
-                # Handle keyboard input
-                key = cv2.waitKey(10)
-                if key == 27:  # ESC key
-                    shm_detected_pose.close()
-                    if SAVE_SESSION_DATA:
-                        save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
-                    break
-            i += 1
+                body_detected_idx = 0      
 
-        zed.disable_body_tracking()
-        zed.close()
-        cv2.destroyAllWindows()
-    
-    except KeyboardInterrupt:
-        shm_detected_pose.close()
-        shm_pnn_input.close()
-        if SAVE_SESSION_DATA:
-            save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
+            # Draw informative text on img
+            pose_value_arr = "Undetected"
+            try:
+                pose_value_arr = np.ndarray(received_data_shape, dtype=np.int64, buffer=shm_detected_pose.buf)
+                pose_string = poses_dict[str(pose_value_arr)]
+            except Exception as e:
+                print(f"[--- BODY TRACKER ---]: Error while putting pose string on img: {e}")
+
+            cv2.putText(
+                img_cv,                     # Image to draw on
+                pose_string,                # Text
+                (10, 300),                  # Position (x=10, y=30)
+                cv2.FONT_HERSHEY_SIMPLEX,   # Font
+                5,                          # Font scale
+                (0, 0, 255),                # Color (Green in BGR)
+                5,                          # Thickness
+                cv2.LINE_AA                 # Line type for anti-aliasing
+            )    
+
+            # Display the image
+            cv2.imshow("ZED Body Tracking", img_cv)
+            
+            # Handle keyboard input
+            key = cv2.waitKey(10)
+            if key == 27:  # ESC key
+                shm_detected_pose.close()
+                if SAVE_SESSION_DATA:
+                    save_session(keypoints_blocks=keypoint_3d_blocks, header=header)
+                break
+        i += 1
+
+    zed.disable_body_tracking()
+    zed.close()
+    cv2.destroyAllWindows()
+
 
 if __name__ == '__main__':
     try:
