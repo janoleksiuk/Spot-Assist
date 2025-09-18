@@ -1,5 +1,4 @@
 import argparse
-import logging
 import math
 import sys
 import time
@@ -12,33 +11,16 @@ import bosdyn.client
 import bosdyn.client.estop
 import bosdyn.client.lease
 import bosdyn.client.util
-
-from bosdyn.api import basic_command_pb2
-from bosdyn.api import geometry_pb2 as geo
-from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
-
-from bosdyn.client import frame_helpers, math_helpers, robot_command
-from bosdyn.client.frame_helpers import (
-    BODY_FRAME_NAME,
-    ODOM_FRAME_NAME,
-    VISION_FRAME_NAME,
-    get_se2_a_tform_b,
-)
-from bosdyn.client.lease import LeaseClient, LeaseKeepAlive
+from bosdyn.client.robot_state import RobotStateClient
 from bosdyn.client.robot_command import (
     RobotCommandBuilder,
-    RobotCommandClient,
-    block_for_trajectory_cmd,
-    blocking_stand,
-)
-from bosdyn.client.robot_state import RobotStateClient
+    RobotCommandClient)
 
 from utils.spot_behaviours import relative_move, sit, stand
 from utils.spot_utils import print_battery_level
 from utils.shared_memory import DETECTED_POSE_MEMORY_NAME
 
 
-#function retrieving detected pose code from endpoint 
 def get_pose(received_data_shape, shm_buffer):
     try:
         pose_value_arr = np.ndarray(received_data_shape, dtype=np.int64, buffer=shm_buffer.buf)
@@ -47,16 +29,15 @@ def get_pose(received_data_shape, shm_buffer):
         print(f"[sPOT CONTROL]: Error while getting pose value: {e}")
         return 0
 
-# function freezing - wait t second
-def countdown(t):
 
+def countdown(t):
     i = 0   
     while(i<t+1):
         print(t - i)
         i = i + 1
         time.sleep(1)
 
-# main program
+
 def run(config):
     shm_detected_pose = shared_memory.SharedMemory(name=DETECTED_POSE_MEMORY_NAME) 
     shm_detected_pose_received_data_shape = (1,)
@@ -69,9 +50,7 @@ def run(config):
     signal.signal(signal.SIGINT, cleanup)
 
     bosdyn.client.util.setup_logging(config.verbose)
-
     sdk = bosdyn.client.create_standard_sdk('StanceClient')
-
     robot = sdk.create_robot(config.hostname)
     bosdyn.client.util.authenticate(robot)
     robot.time_sync.wait_for_sync()
@@ -83,18 +62,12 @@ def run(config):
         robot_state_client = robot.ensure_client(RobotStateClient.default_service_name)
         state = robot_state_client.get_robot_state()
 
-        # acknowledge with battery state and press a to continue
         print_battery_level(state)
-        print("PRESS 'a' to proceed.")
-        while True:
-            user_input = input("Input: ")
-            if user_input.lower() == "a":
-                break
 
-        # Power On
+        # Spot power on
         robot.time_sync.wait_for_sync()
         robot.power_on()
-        assert robot.is_powered_on(), 'Robot power on failed.'
+        assert robot.is_powered_on(), '[--- SPOT CONTROL ---]: Robot power on failed.'
 
         exit_flag = False
         current_behaviour = ''
@@ -105,28 +78,24 @@ def run(config):
         # lauching system with sitting_1hand
         while(True):
             if get_pose(received_data_shape=shm_detected_pose_received_data_shape, shm_buffer=shm_detected_pose) == 2:
-                print("--- ROBOT READY --- ")
                 break
 
         # Main loop
         while(True):
-
             pose_code = get_pose(received_data_shape=shm_detected_pose_received_data_shape, shm_buffer=shm_detected_pose) 
             # 0 - sitting; 1 - standing;  2- sitting_1hand; 3 - standing_1hand
 
             if (pose_code == 2) and not (current_behaviour == ''):
                 exit_flag = True
 
-            #executing behaviour
+            # executing behaviour
             # sitting
             elif (pose_code == 0) and not (current_behaviour == 'sitting' or current_behaviour == ''):
-                
                 try:
                     exit_flag = not sit(command_client)
                     current_behaviour = 'sitting'
                 finally:
                     command_client.robot_command(RobotCommandBuilder.stop_command())
-            
             #standing
             elif (pose_code == 1) and not (current_behaviour == 'standing'):
                 
@@ -135,7 +104,6 @@ def run(config):
                     current_behaviour = 'standing'
                 finally:
                     command_client.robot_command(RobotCommandBuilder.stop_command())
-
             #moving forward
             elif (pose_code == 3 and current_behaviour == 'standing'):
                 
@@ -147,24 +115,23 @@ def run(config):
                     command_client.robot_command(RobotCommandBuilder.stop_command())
 
             if exit_flag:
-                print("--- EXIT ---")
                 shm_detected_pose.close()
                 break
 
         robot.power_off(cut_immediately=False, timeout_sec=20)
-                
+
+
 def main():
     """Command line interface."""
     parser = argparse.ArgumentParser()
     bosdyn.client.util.add_base_arguments(parser)
     options = parser.parse_args()
-
     try:
         run(options)
         return True
     except Exception as exc:  # pylint: disable=broad-except
         logger = bosdyn.client.util.get_logger()
-        logger.error('Threw an exception: %s\n%s', exc, traceback.format_exc())
+        logger.error('[--- SPOT CONTROL ---]: Threw an exception: %s\n%s', exc, traceback.format_exc())
         return False
 
 
