@@ -6,4 +6,67 @@ System for supporting people in daily activities using **Boston Dynamics Spot** 
 
 ---
 
-To be described
+## Overview
+
+Project is a **framework for robotized solutions for people with limited independence due to age and mobility restrictions**. The system is composed of a human behavior monitoring module for activity recognition, and a reasoning robot that executes actions based on the classified human behavior (e.g., upon detecting that a person stands up and picks up a cup from the table, the robot will identify and deliver a bottle of water). A simplified conceptual scheme is provided below:
+
+<img width="1400" height="638" alt="Przechwytywanie" src="https://github.com/user-attachments/assets/5a393ac9-568a-46ad-8b61-5d967ae42a7a" />
+
+**Key Features:**
+- Real-time body tracking using **ZED 2** stereo camera 
+- Human activity detection based on [custom probabilistic neural network](https://ieeexplore.ieee.org/document/10309359)
+- Sample human activity dataset 
+- **Boston Dynamics Spot** action programs using **SPOT SDK**
+
+---
+
+## Requirements
+
+- **Boston Dynamics Spot** robot with **Spot Arm**
+- **SPOT SDK** ([download here](https://github.com/boston-dynamics/spot-sdk))
+- **ZED 2** stereo camera
+- **ZED SDK 5.0+** ([download here](https://www.stereolabs.com/en-pl/developers/release))
+- **CUDA 12.1+**
+- **Python 3.12+**
+- **Windows OS** (preferred 10/11)
+
+ ---
+
+ ## Usage
+ 
+1. **Connect hardware with your PC**
+- Connect **ZED 2** camera with PC using USB 3.0 port
+- Connect **Boston Dynamics Spot** using Wi-Fi
+
+2. **Install dependencies before first launch**
+```bash
+python -m pip install -r requirements.txt
+```
+
+3. **Launch human activity detection module**
+```bash
+python main.py
+```
+
+4. **Run Boston Dynamics Spot control program**
+In another CLI terminal run:
+```bash
+cd spot-control
+py action-control.py YOUR_SPOT_MODEL_IP_HERE
+```
+
+---
+
+## Project structure
+```
+src/
+├── body-tracker/           # Body tracking program utilizing ZED 2 camera
+├── launch/                 # Tracking and detection system launch manager files
+├── pose-classifier/        # PNN-based classifier decoding body tracking input to recognized human activities
+├── spot-control/           # Boston Dynamics Spot control programs and utils (also contains examples)
+.
+.
+.
+```
+
+---
