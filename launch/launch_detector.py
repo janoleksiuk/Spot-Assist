@@ -3,9 +3,10 @@ import time
 import signal
 import sys
 from pathlib import Path 
-from launch.memory_management import memory_init, DETECTED_POSE_MEMORY_NAME, \
-                                                  DETECTED_ACTION_MEMORY_NAME, \
-                                                  PNN_INPUT_MEMORY_NAME
+from launch.memory_management import memory_init
+from config.config import DETECTED_POSE_MEMORY_NAME, \
+                          DETECTED_ACTION_MEMORY_NAME, \
+                          PNN_INPUT_MEMORY_NAME
 
 # file direcotry creator function
 def assemble_dir(*parts: str) -> str:

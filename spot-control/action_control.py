@@ -18,20 +18,26 @@ from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from bosdyn.api import geometry_pb2, manipulation_api_pb2
 from bosdyn.client import frame_helpers
 
-from utils.spot_behaviours import start_rotating, stop_moving, relative_move, raise_arm, move_forward
+from utils.spot_behaviours import start_rotating, stop_moving, relative_move, raise_arm, move_forward, stow_arm, stand, sit, release_gripper
 from utils.object_detection import detect_objects, compute_depth_to_object
 from utils.spot_utils import print_battery_level
 from utils.shared_memory import DETECTED_ACTION_MEMORY_NAME
 
 
+# robot behaviour variables
 MODEL_PATH = r"model\yolo11n.pt"
 ROT_VEL = 0.2
 FORWARD_VEL = 0.2
+
+# robot action variables
+# define your own for your custom robot action
 FIRST_TARGET = 'bottle'
 SECOND_TARGET = 'person'
 GRAB_OBJECT = 'bottle'
 
 
+# approaching object is based on t he Spot built-in cameras object detection
+# for better results use SpotCam module
 def approach_object(robot_command_client, img_client, robot_state_client, object_name, model, dist=0):
     object_found = False
     stop_rotation_thread = threading.Event()
@@ -82,6 +88,7 @@ def approach_object(robot_command_client, img_client, robot_state_client, object
     return True
 
 
+# grabbing object is based on the SpotArm gripper camera object detection
 def grab_object(robot_command_client, img_client, manipulation_client, object_name, model):
     object_detected = False
     while not object_detected:
@@ -152,6 +159,39 @@ def get_action(received_data_shape, shm_buffer):
     except Exception as e:
         print(f"[--- SPOT CONTROL ---]: Error while getting pose value: {e}")
         return 0
+    
+
+# robot action exectuded by detecting action - modify it or add your custom suing spot_behaviours function
+# this version commands robot to:
+    # 1. Localize and approach given object
+    # 2. Grab given object
+    # 3. Localize and approach second object
+    # 4. Deliver first given object
+    # where object are defined globally (grab object = bottle, second object = person from default YOLOv11 object library)
+def robot_action(robot_command_client, robot_state_client=None, image_client=None, manipulation_client=None, model=None):
+    # initial stand-up
+    blocking_stand(robot_command_client, timeout_sec=1)
+
+    # find and approach bottle
+    obj_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=FIRST_TARGET, model=model)
+
+    # grab bottle
+    obj_grabbed = grab_object(robot_command_client, image_client, manipulation_client, object_name=GRAB_OBJECT, model=model)
+
+    # relocate arm
+    raised_arm = raise_arm(robot_command_client)
+
+    # find and approach human
+    human_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=SECOND_TARGET, model=model)
+
+    # release gripper
+    gripper_released = release_gripper(robot_command_client)
+
+    # move backwards
+    mv_fwd = move_forward(robot_command_client, fwd_vel=-0.5, duration_sec=1)
+
+    task_completed = obj_approached and obj_grabbed and human_approached and gripper_released and mv_fwd and raised_arm
+    return task_completed
 
 
 def main():
@@ -200,34 +240,14 @@ def main():
             while True:
                 if not get_action(received_data_shape=shm_detected_action_received_data_shape, shm_buffer=shm_detected_action) == 1: 
                 # code action 1 = sit -> stand -> sit
+                # add your custom action sequneces code here
                     time.sleep(0.5)
                 else:
-                    # initial stand-up
-                    blocking_stand(robot_command_client, timeout_sec=10)
-                    time.sleep(1)
-
-                    # find and approach bottle
-                    obj_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=FIRST_TARGET, model=model)
-                    time.sleep(1)
-
-                    # grab bottle
-                    obj_grabbed = grab_object(robot_command_client, image_client, manipulation_client, object_name=GRAB_OBJECT, model=model)
-                    time.sleep(1)
-
-                    # relocate arm
-                    raise_arm(robot_command_client)
-                    time.sleep(1)
-
-                    # find and approach human
-                    human_approached = approach_object(robot_command_client, image_client, robot_state_client, object_name=SECOND_TARGET, model=model)
-                    time.sleep(2)
-
-                    # release gripper
-                    robot_command_client.robot_command(RobotCommandBuilder.claw_gripper_open_command())
-                    time.sleep(1)
-
-                    move_forward(robot_command_client, fwd_vel=-0.5, duration_sec=1)
-                    task_completed = obj_approached and obj_grabbed and human_approached
+                    task_completed = robot_action(robot_command_client,
+                                                  robot_state_client=robot_state_client,
+                                                  image_client=image_client,
+                                                  manipulation_client=manipulation_client,
+                                                  model=model)
                     break
 
     except Exception as e:
@@ -238,17 +258,12 @@ def main():
             if not task_completed:
                 print("[--- SPOT CONTROL ---]: Task not accomplished.")
                 stop_moving(robot_command_client)
-                time.sleep(1)
-                robot_command_client.robot_command(RobotCommandBuilder.arm_stow_command())
-                time.sleep(1)
-                robot_command_client.robot_command(RobotCommandBuilder.synchro_sit_command())
-                time.sleep(1)
+                stow_arm(robot_command_client)
+                sit(robot_command_client)
                 robot.power_off(cut_immediately=False, timeout_sec=20)
             else:
                stop_moving(robot_command_client)
-               time.sleep(1)
-               robot_command_client.robot_command(RobotCommandBuilder.synchro_sit_command())
-               time.sleep(1) 
+               sit(robot_command_client)
                robot.power_off(cut_immediately=False, timeout_sec=20)
 
         except Exception as e:

@@ -1,9 +1,8 @@
 from multiprocessing import shared_memory
 import numpy as np
-
-DETECTED_POSE_MEMORY_NAME = "detected_pose_code_shm"
-DETECTED_ACTION_MEMORY_NAME = "detected_action_code_shm"
-PNN_INPUT_MEMORY_NAME = "pnn_input_code_shm"
+from config.config import DETECTED_POSE_MEMORY_NAME, \
+                          DETECTED_ACTION_MEMORY_NAME, \
+                          PNN_INPUT_MEMORY_NAME
 
 
 def init_memory_segment(name, size):

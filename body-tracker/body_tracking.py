@@ -2,18 +2,11 @@ import pyzed.sl as sl
 import cv2
 import numpy as np
 import pandas as pd
-from datetime import datetime
-from multiprocessing import shared_memory
 import sys
 import signal
-
-BODY_IDX = 34
-CONFIDENCE_THR = 40 # confidence of body_point detection
-SAVE_SESSION_DATA = False
-POSES_DICT = {"[0]" : "sitting", 
-                "[1]": "standing", 
-                "[2]" : "sitting_1hand", 
-                "[3]": "standing_1hand"}
+from datetime import datetime
+from multiprocessing import shared_memory
+from config.config import BODY_IDX, SAVE_SESSION_DATA, CONFIDENCE_THR, POSES_DICT
 
 
 def apply_moving_mean(df, window_size):

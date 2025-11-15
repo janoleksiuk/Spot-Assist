@@ -7,11 +7,7 @@ import os
 import sys
 import signal
 from pathlib import Path
-from sklearn.metrics import accuracy_score, \
-							confusion_matrix, \
-							precision_score, \
-							f1_score, \
-							recall_score
+
 
 MODEL_PATH = Path("pose-classifier") / "reference_data" / "reference_data.csv"
 
