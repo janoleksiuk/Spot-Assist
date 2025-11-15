@@ -60,13 +60,32 @@ py action-control.py YOUR_SPOT_MODEL_IP_HERE
 ## Project structure
 ```
 src/
-├── body-tracker/           # Body tracking program utilizing ZED 2 camera
-├── launch/                 # Tracking and detection system launch manager files
-├── pose-classifier/        # PNN-based classifier decoding body tracking input to recognized human activities
-├── spot-control/           # Boston Dynamics Spot control programs and utils (also contains examples)
-.
-.
+├── body-tracker/
+│   └── body_tracking.py/            # Body tracking program utilizing ZED 2 camera
+├── config/                          # Launcher configuration 
+├── launch/
+│   └── launch_detector.py           # Tracking and detection system launch manager
+│   └── memory_managment.py          # Multiprocess shared memory manager
+├── pose-classifier/                 # PNN-based classifier decoding body tracking input to recognized human activities files
+│   └── reference_data/              # PNN classifier reading input data helper function
+│           └── reference_data.csv   # CSV file storing reference human bofy_tracking labelled data (PNN reference) 
+│   └── detect_human_action.py       # human behaviours (classified multipose sequences) detector
+│   └── pnn.py                       # PNN-based classifier decoding body tracking input to single pose
+│   └── read_action.py               # PNN classifier reading input data helper function
+├── spot-control/                    # Boston Dynamics Spot control programs and utils (also contains examples)
+│   └── examples/
+│           └── example_01.py        # Boston Dynamics Spot basic actions (sit/stand/moving forwad) based on detected single pose
+│           └── example_02.py        # Boston Dynamics Spot basic actions (sit/stand) based on detected single action
+│   └── model/
+│           └── yolo11n.pt           # Ultralytics YOLO11 nano model (change for your suited YOLO model, nano recommended for high perfomance)
+│   └── utils/
+│           └── object_detection.py  # Function for YOLO-based object detection based on Boston Dynamics Spot cameras
+│           └── shared_memory.py     # Interface for system launcher multiprocess shared memory manager
+│           └── spot_behaviours.py   # Library containing safe Boston Dynamics Spot motion commands execution 
+│           └── spot_utils.py        # Library for Boston Dynamics Spot utility functions
+│   └── action_control.py            # Main Boston Dynamics Spot controller - adjust robot_action() function for your custom system (implemented searching and delivering bottle)
+├── main.py
 .
 ```
+**Note:** To adjust system to your custom human actions data upload your `pose-classifier/reference_data/reference_data.csv` labelled reference data for your custom activities (required format: 34 BODY TRACKING ZED human keypoints data preprocessed to 19 points - to get body tracking and preprocessing code see `body-tracker/body_tracking.py` file.
 
----
