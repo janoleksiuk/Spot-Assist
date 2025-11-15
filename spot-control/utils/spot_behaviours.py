@@ -109,15 +109,9 @@ def stop_moving(client):
         return False
 
 
-def raise_arm(client):
+# sh0, sh1, el0, el1, wr0, wr1 - desired joint coordinates of a 6-DOF SpotARM
+def raise_arm(client, sh0=0.0, sh1=-1.5, el0=2.5, el1=0.0, wr0=-1.5, wr1=0.0):
     try:
-        sh0 = 0.0
-        sh1 = -1.5
-        el0 = 2.5
-        el1 = 0.0
-        wr0 = -1.5
-        wr1 = 0.0
-
         traj_point = RobotCommandBuilder.create_arm_joint_trajectory_point(
             sh0, sh1, el0, el1, wr0, wr1, time_since_reference_secs=1.0)
 
@@ -148,5 +142,38 @@ def move_forward(client, fwd_vel, duration_sec=0.5):
 
     except Exception as e:
         print(f"[--- SPOT CONTROL ---]: Failed to move forward: {e}")
+        client.robot_command(RobotCommandBuilder.stop_command())
+        return False
+    
+
+def stow_arm(client):
+    try: 
+        cmd = RobotCommandBuilder.arm_stow_command()
+        client.robot_command(cmd)
+        return True
+    except Exception as e:
+        print(f"[--- SPOT CONTROL ---]: Failed to stow arm: {e}")
+        client.robot_command(RobotCommandBuilder.stop_command())
+        return False
+   
+    
+def release_gripper(client):
+    try: 
+        cmd = RobotCommandBuilder.claw_gripper_open_command()
+        client.robot_command(cmd)
+        return True
+    except Exception as e:
+        print(f"[--- SPOT CONTROL ---]: Failed to release gripper: {e}")
+        client.robot_command(RobotCommandBuilder.stop_command())
+        return False
+    
+
+def lock_gripper(client):
+    try: 
+        cmd = RobotCommandBuilder.claw_gripper_close_command()
+        client.robot_command(cmd)
+        return True
+    except Exception as e:
+        print(f"[--- SPOT CONTROL ---]: Failed to lock gripper: {e}")
         client.robot_command(RobotCommandBuilder.stop_command())
         return False

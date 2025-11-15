@@ -1,9 +1,7 @@
-from launch.launch_detector import launch
-
+from launch.launch_detector import launch, test
 
 def main():
     launch()
-
 
 if __name__ == "__main__":
     try:
