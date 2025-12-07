@@ -1,6 +1,6 @@
 # SpotAssist
 
-System for supporting people in daily activities using **Boston Dynamics Spot** robot and real-time human activity classifier.
+Model-based system for supporting people in daily activities using **Boston Dynamics Spot** robot and real-time human activity recognition.
 
 ![ezgif com-speed (1)](https://github.com/user-attachments/assets/23986807-7753-41b3-9512-1ff1b075a650)
 
@@ -14,7 +14,7 @@ Project is a **framework for robotized solutions for people with limited indepen
 
 **Key Features:**
 - Real-time body tracking using **ZED 2** stereo camera 
-- Human activity detection based on [custom probabilistic neural network](https://ieeexplore.ieee.org/document/10309359)
+- Human activity recogntion based on [custom Probabilistic Neural Network (PNN) model](https://ieeexplore.ieee.org/document/10309359)
 - Sample human activity dataset 
 - **Boston Dynamics Spot** action programs using **SPOT SDK**
 
