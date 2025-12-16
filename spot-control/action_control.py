@@ -54,6 +54,9 @@ def approach_object(robot_command_client, img_client, robot_state_client, object
     while True:
         detections, frame = detect_objects(img_client, model, source_name='frontright_fisheye_image')
 
+        if not detections:
+            continue
+
         for det in detections:
             if det['label'] == object_name:
                 x1, y1, x2, y2 = det['bbox']
