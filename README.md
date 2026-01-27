@@ -83,7 +83,8 @@ src/
 │           └── shared_memory.py     # Interface for system launcher multiprocess shared memory manager
 │           └── spot_behaviours.py   # Library containing safe Boston Dynamics Spot motion commands execution 
 │           └── spot_utils.py        # Library for Boston Dynamics Spot utility functions
-│   └── action_control.py            # Main Boston Dynamics Spot controller - adjust robot_action() function for your custom system (implemented searching and delivering bottle)
+│   └── action_control.py            # Main Boston Dynamics Spot controller 
+│   └── robot_task.py                # Defition for robotic tasks - adjust it or add your own using spot_bheviours!
 ├── main.py
 .
 ```
